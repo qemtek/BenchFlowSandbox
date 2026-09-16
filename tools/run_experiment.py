@@ -32,7 +32,10 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from provenance import collect  # noqa: E402
 
-MLRUNS = REPO / "mlruns"
+# MLflow 3.x put the filesystem store into maintenance mode; SQLite is the
+# supported local backend and is queryable, which suits comparing arms.
+TRACKING_DB = REPO / "mlflow.db"
+ARTIFACTS = REPO / "mlartifacts"
 
 
 def gold_action_count(tasks_path: pathlib.Path) -> int:
@@ -89,8 +92,12 @@ def main() -> int:
 
     import mlflow
 
-    mlflow.set_tracking_uri(f"file://{MLRUNS}")
-    mlflow.set_experiment(args.experiment)
+    ARTIFACTS.mkdir(exist_ok=True)
+    mlflow.set_tracking_uri(f"sqlite:///{TRACKING_DB}")
+    mlflow.set_experiment(
+        args.experiment,
+        artifact_location=f"file://{ARTIFACTS}",
+    )
 
     tasks_path = REPO / args.tasks if not args.tasks.startswith("/") else pathlib.Path(args.tasks)
     stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
