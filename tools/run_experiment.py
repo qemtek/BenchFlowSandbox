@@ -94,10 +94,13 @@ def main() -> int:
 
     ARTIFACTS.mkdir(exist_ok=True)
     mlflow.set_tracking_uri(f"sqlite:///{TRACKING_DB}")
-    mlflow.set_experiment(
-        args.experiment,
-        artifact_location=f"file://{ARTIFACTS}",
-    )
+    # set_experiment does not take artifact_location; create it explicitly the
+    # first time so artifacts land in the repo rather than beside the db.
+    if mlflow.get_experiment_by_name(args.experiment) is None:
+        mlflow.create_experiment(
+            args.experiment, artifact_location=f"file://{ARTIFACTS}"
+        )
+    mlflow.set_experiment(args.experiment)
 
     tasks_path = REPO / args.tasks if not args.tasks.startswith("/") else pathlib.Path(args.tasks)
     stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
