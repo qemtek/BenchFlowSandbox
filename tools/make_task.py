@@ -34,7 +34,12 @@ import shutil
 REPO = pathlib.Path(__file__).resolve().parent.parent
 TAU2_DATA = REPO / "data" / "banking_knowledge"
 
-DOCKERFILE = """FROM python:3.12-slim
+# Base image pinned by digest, not tag: `python:3.12-slim` is mutable, so the
+# same commit would build a different container next month. Refresh with
+#   docker pull python:3.12-slim && docker inspect --format='{{index .RepoDigests 0}}' python:3.12-slim
+BASE_IMAGE = "python@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea"
+
+DOCKERFILE = """FROM __BASE_IMAGE__
 
 ENV DEBIAN_FRONTEND=noninteractive \\
     PIP_DISABLE_PIP_VERSION_CHECK=1 \\
@@ -46,8 +51,11 @@ RUN apt-get update && \\
     rm -rf /var/lib/apt/lists/*
 
 # Only what the vendored banking domain imports — not tau2's agent/LLM stack.
+# Exact versions: an unpinned dependency release would change agent behaviour
+# with no trace in any digest.
 RUN python -m pip install \\
-      pydantic==2.* deepdiff addict loguru python-dotenv toml pyyaml docstring-parser
+      pydantic==2.13.5 deepdiff==9.1.0 addict==2.4.0 loguru==0.7.3 \\
+      python-dotenv==1.2.3 toml==0.10.2 PyYAML==6.0.3 docstring_parser==0.18.0
 
 # These COPY sources resolve against the shared build context (--context-root .),
 # so vendor/ and the knowledge base exist once in the repo rather than being
@@ -515,6 +523,7 @@ def generate(task_id: str, out_root: pathlib.Path) -> None:
     (pkg / "task.md").write_text(briefing(task))
     (pkg / "environment" / "Dockerfile").write_text(
         DOCKERFILE.replace("__TASK_PKG__", out_root.name + "/" + slug)
+                  .replace("__BASE_IMAGE__", BASE_IMAGE)
     )
 
     (pkg / "verifier" / "gold.json").write_text(

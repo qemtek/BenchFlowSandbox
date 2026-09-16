@@ -84,8 +84,29 @@ def git_state() -> dict:
     }
 
 
+def toolchain() -> dict:
+    """Versions of tools that shape a result but live outside the repo.
+
+    BenchFlow computes the rewards, so an upgrade can move scores with nothing
+    in git or any digest to show for it. Same for the Docker engine that builds
+    the environment.
+    """
+    def ver(*cmd):
+        try:
+            return subprocess.run(
+                cmd, capture_output=True, text=True, check=True
+            ).stdout.strip().splitlines()[0]
+        except Exception:
+            return "unknown"
+
+    return {
+        "benchflow": ver("benchflow", "--version"),
+        "docker": ver("docker", "version", "--format", "{{.Server.Version}}"),
+    }
+
+
 def collect() -> dict:
-    out = {"git": git_state(), "digests": {}, "file_counts": {}}
+    out = {"git": git_state(), "toolchain": toolchain(), "digests": {}, "file_counts": {}}
     for name, (rel, suffixes) in TRACKED.items():
         digest, count = digest_dir(REPO / rel, suffixes)
         out["digests"][name] = digest
@@ -124,6 +145,8 @@ def main() -> int:
     print(f"combined {data['digests']['combined'][:19]}…")
     if "vendored_tau2_commit" in data:
         print(f"tau2     {data['vendored_tau2_commit'][:12]}")
+    for k, v in data["toolchain"].items():
+        print(f"{k:9s}{v}")
     return 0
 
 

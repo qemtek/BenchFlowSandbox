@@ -132,6 +132,8 @@ def main() -> int:
             "digest_prompts": prov["digests"]["prompts"],
             "digest_combined": prov["digests"]["combined"],
             "vendored_tau2_commit": prov.get("vendored_tau2_commit", ""),
+            "benchflow_version": prov["toolchain"]["benchflow"],
+            "docker_version": prov["toolchain"]["docker"],
             "agent": args.agent,
             "model": args.model,
             "skill_mode": args.skill_mode,
