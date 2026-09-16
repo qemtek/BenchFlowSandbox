@@ -1,0 +1,55 @@
+[
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "initial_transfer_to_human_agent_0218"
+    },
+    "requestor": "assistant",
+    "action_id": "032_0",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "initial_transfer_to_human_agent_0218"
+    },
+    "requestor": "assistant",
+    "action_id": "032_1",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "initial_transfer_to_human_agent_0218"
+    },
+    "requestor": "assistant",
+    "action_id": "032_2",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "initial_transfer_to_human_agent_0218"
+    },
+    "requestor": "assistant",
+    "action_id": "032_3",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "transfer_to_human_agents",
+    "arguments": {
+      "summary": ""
+    },
+    "requestor": "assistant",
+    "action_id": "032_4",
+    "compare_args": []
+  }
+]

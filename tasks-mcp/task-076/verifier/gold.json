@@ -1,0 +1,33 @@
+[
+  {
+    "name": "log_verification",
+    "arguments": {
+      "name": "Anastasia Volkov",
+      "user_id": "av96d4e7f1",
+      "address": "1847 Pacific Heights Avenue, San Francisco, CA 94115",
+      "email": "anastasia.volkov@globaltech.com",
+      "phone_number": "415-555-2983",
+      "date_of_birth": "03/14/1996",
+      "time_verified": "2025-11-14 03:40:00 EST"
+    },
+    "requestor": "assistant",
+    "action_id": "076_0"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821"
+    },
+    "requestor": "assistant",
+    "action_id": "076_1"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": "{\"user_id\": \"av96d4e7f1\", \"account_type\": \"checking\", \"account_class\": \"Purple Account\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "076_2"
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "emergency_credit_bureau_incident_transfer_1114"
+    },
+    "requestor": "assistant",
+    "action_id": "035_0",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "emergency_credit_bureau_incident_transfer_1114"
+    },
+    "requestor": "assistant",
+    "action_id": "035_1",
+    "compare_args": [
+      "agent_tool_name"
+    ]
+  },
+  {
+    "name": "transfer_to_human_agents",
+    "arguments": {
+      "summary": ""
+    },
+    "requestor": "assistant",
+    "action_id": "035_2",
+    "compare_args": []
+  }
+]

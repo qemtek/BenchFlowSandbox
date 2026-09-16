@@ -1,0 +1,14 @@
+[
+  {
+    "name": "transfer_to_human_agents",
+    "arguments": {
+      "reason": "account_ownership_dispute",
+      "summary": ""
+    },
+    "compare_args": [
+      "reason"
+    ],
+    "requestor": "assistant",
+    "action_id": "004_0"
+  }
+]

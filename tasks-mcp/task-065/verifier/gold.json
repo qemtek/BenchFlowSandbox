@@ -1,0 +1,59 @@
+[
+  {
+    "name": "log_verification",
+    "arguments": {
+      "name": "Riley Parker",
+      "user_id": "rp65a7b3c4",
+      "address": "3847 Burnside Street, Portland, OR 97214",
+      "email": "riley.parker@gmail.com",
+      "phone_number": "503-555-0293",
+      "date_of_birth": "07/19/1991",
+      "time_verified": "2025-11-14 03:40:00 EST"
+    },
+    "requestor": "assistant",
+    "action_id": "065_0"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821"
+    },
+    "requestor": "assistant",
+    "action_id": "065_1"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": "{\"user_id\": \"rp65a7b3c4\", \"account_type\": \"savings\", \"account_class\": \"Green Account\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "065_2"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": "{\"user_id\": \"rp65a7b3c4\", \"account_type\": \"checking\", \"account_class\": \"Evergreen Account\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "065_3"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "close_bank_account_7392"
+    },
+    "requestor": "assistant",
+    "action_id": "065_4"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "close_bank_account_7392",
+      "arguments": "{\"account_id\": \"chk_rp65a7b3c4\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "065_5"
+  }
+]

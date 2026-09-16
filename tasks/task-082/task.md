@@ -1,0 +1,106 @@
+---
+# Task frontmatter template. Curly-brace fields are filled by tools/make_task.py.
+# Edit here to change configuration for every generated task at once.
+schema_version: '1.3'
+task:
+  name: bank/task-082
+metadata:
+  domain: banking_knowledge
+  source_task_id: task_082
+  reward_basis: DB
+  requestor: assistant
+agent:
+  timeout_sec: 900.0
+verifier:
+  type: test-script
+  timeout_sec: 300.0
+sandbox:
+  workdir: /app
+  # no-network would arm BenchFlow's egress firewall, which shells out to
+  # iptables and needs NET_ADMIN — unavailable under Docker Desktop. Nothing
+  # in the task reaches out: the knowledge base is local files.
+  network_mode: public
+  build_timeout_sec: 1800.0
+---
+
+## prompt
+
+You are a customer service agent at Rho-Bank. Handle the customer enquiry below.
+
+### Your tools
+
+    bank list                          the core toolkit
+    bank search <words>                find an operation by what it does
+    bank <operation> --help            its flags
+    bank <operation> --flag value      run it
+
+The bank runs many more operations than `bank list` shows. Use `bank search` to
+find the one you need — for example `bank search close account` — then
+`bank <operation> --help` to see its flags. For example:
+
+    bank change-user-email --user-id 123 --new-email new@example.com
+
+Finding an operation does not tell you how to use it correctly. Eligibility
+rules, fees, and policy live in the bank's internal documentation at
+`/data/documents`; search it (`rg`, `grep`) and follow the procedure it
+describes.
+
+### Bank policy
+
+Verify the customer's identity before disclosing or changing account
+information, and record it with `log_verification`. Never reveal information
+belonging to any other customer. Only state fees, rates, or terms that appear
+in the documentation.
+
+If the documentation describes an exception procedure that applies to this
+case, follow the documentation.
+
+### Case notes
+
+The call has already taken place. Everything the customer said is recorded
+below, written from their point of view. Read it as a transcript summary, not
+as a live conversation — **the customer has hung up and cannot answer further
+questions.** Work only from what is here plus what you can look up.
+
+<case_notes>
+The customer is Marcus Chen, a 41-year-old small business owner living in Seattle, Washington. They run a coffee equipment supply company and have been a Rho-Bank customer for years. The customer is meticulous with finances and review their bank statements weekly.
+
+**situation:** During their weekly statement review, they discovered FOUR suspicious transactions across TWO of their debit cards. 
+
+**Verification info:**
+- Name: Marcus Chen | Phone: 206-555-0892 | Email: marcus.chen@seattlebrew.com
+- DOB: 03/22/1984 | Address: 1847 Pine Street, Seattle, WA 98101
+
+**YOUR TWO DEBIT CARDS:**
+1. Blue Account debit card - They LOST this card 3 days ago but haven't reported it yet
+2. Green Fee-Free Account debit card - They still have this card
+
+What the customer said during the call:
+
+- "Hi, I need to speak to a human agent. I reviewed my bank statements today and found four transactions I need to dispute - two on each of my debit cards. Some are unauthorized transactions I never made, one is an ATM error, and one is a subscription that won't stop charging me even after I cancelled."
+- "The most concerning one is on my Blue Account card ending in 4827 - I actually lost that card about 3 days ago but hadn't gotten around to reporting it yet. Today I see there's a $347.50 charge at ElectroniX Outlet from November 7th that I definitely didn't make. This is completely unauthorized - I never authorized this transaction."
+- "This is embarrassing, but yes, I had my PIN written on a sticky note in my wallet. So whoever has the card probably has the PIN too."
+- "No, I don't have the card anymore - it was in my wallet that I lost."
+- "No, I haven't contacted them - I don't even know who they are."
+- "On that same Blue Account card, there's also a $89.99 charge from FitLife Premium on November 10th. I cancelled that gym membership back in October but they charged me anyway. I called them on November 11th and they said no refunds. Important detail: this charge happened on November 10th, but I didn't lose my card until November 11th or 12th. So I still had the card when FitLife charged me - it was just an automatic recurring charge, no PIN involved."
+- "On my Green Fee-Free Account card ending in 7391, I used the Rho-Bank ATM - machine 2847 - on November 9th. I requested $200 but only got $100 in cash. The receipt says $200 though. I noticed right away but wasn't sure what to do."
+- "Also on that Green Fee-Free card, there's a charge for $523.17 from something called CryptoGems Store on November 12th. I've never heard of this place and I definitely didn't buy anything from them. This is the biggest charge and it's really worrying me."
+- "I still have the card - this must have been someone who got my card number somehow."
+- "I haven't filed one yet, but yes, I can file a police report if that would help. It's a lot of money."
+- "That card needs to be cancelled anyway since I lost it. Please issue a new one."
+- "I'd like to keep using this card but maybe with a new number? Can you reissue it?"
+- "I discovered it today, November 14th."
+- "I saw the charge on November 11th when I called them to complain."
+- "I noticed immediately on November 9th when the cash came out short."
+- "I discovered this one today, January 9th."
+- "I understand - so since I'm reporting within a few days, I should be protected, right? What about the ATM one since I noticed right away?"
+- "That would be really helpful - especially for the bigger amounts. How does that work exactly?"
+- "Yes, absolutely. You can use this conversation as my written statement."
+</case_notes>
+
+### What to do now
+
+Carry out the customer's request using `bank call`. Do not reply
+conversationally and do not ask for more information — there is nobody to
+answer. Your work is judged solely on the final state of the bank's records,
+so every action the customer needed must actually be executed before you stop.

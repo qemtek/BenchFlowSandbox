@@ -1,0 +1,33 @@
+[
+  {
+    "name": "log_verification",
+    "arguments": {
+      "name": "Yuki Nakamura",
+      "user_id": "224959b99e",
+      "address": "3421 Sakura Avenue, Portland, OR 97205",
+      "email": "yuki.nakamura@simba.com",
+      "phone_number": "503-555-0842",
+      "date_of_birth": "05/12/1991",
+      "time_verified": "2025-11-14 03:40:00 EST"
+    },
+    "requestor": "assistant",
+    "action_id": "046_0"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+    },
+    "requestor": "assistant",
+    "action_id": "046_1"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "arguments": "{\"user_id\": \"224959b99e\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "046_2"
+  }
+]

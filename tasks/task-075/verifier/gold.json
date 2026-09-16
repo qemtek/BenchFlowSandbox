@@ -1,0 +1,33 @@
+[
+  {
+    "name": "log_verification",
+    "arguments": {
+      "name": "Marco Vitiello",
+      "user_id": "mv93f8a7b2",
+      "address": "2847 South Lamar Boulevard, Austin, TX 78704",
+      "email": "marco.vitiello@gmail.com",
+      "phone_number": "512-555-0847",
+      "date_of_birth": "08/22/1993",
+      "time_verified": "2025-11-14 03:40:00 EST"
+    },
+    "requestor": "assistant",
+    "action_id": "075_0"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821"
+    },
+    "requestor": "assistant",
+    "action_id": "075_1"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": "{\"user_id\": \"mv93f8a7b2\", \"account_type\": \"checking\", \"account_class\": \"Green Fee-Free Account\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "075_2"
+  }
+]

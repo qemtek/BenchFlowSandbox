@@ -1,0 +1,149 @@
+[
+  {
+    "name": "log_verification",
+    "arguments": {
+      "name": "Daniel Park-Hernandez",
+      "user_id": "e9d195fe8e",
+      "address": "7245 Mountain View Way, Scottsdale, AZ 85250",
+      "email": "daniel.ph@outlook.com",
+      "phone_number": "480-555-0917",
+      "date_of_birth": "05/12/1991",
+      "time_verified": "2025-11-14 03:40:00 EST"
+    },
+    "requestor": "assistant",
+    "action_id": "053_0"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+    },
+    "requestor": "assistant",
+    "action_id": "053_1"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "arguments": "{\"user_id\": \"e9d195fe8e\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_2"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+    },
+    "requestor": "assistant",
+    "action_id": "053_3"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "arguments": "{\"credit_card_account_id\": \"cc_e9d195fe8e_silver\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_4"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_credit_limit_increase_history_4829"
+    },
+    "requestor": "assistant",
+    "action_id": "053_5"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_credit_limit_increase_history_4829",
+      "arguments": "{\"credit_card_account_id\": \"cc_e9d195fe8e_silver\"}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_6"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_payment_history_6183"
+    },
+    "requestor": "assistant",
+    "action_id": "053_7"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "get_payment_history_6183",
+      "arguments": "{\"credit_card_account_id\": \"cc_e9d195fe8e_silver\", \"months\": 3}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_8"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392"
+    },
+    "requestor": "assistant",
+    "action_id": "053_9"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392",
+      "arguments": "{\"credit_card_account_id\": \"cc_e9d195fe8e_silver\", \"user_id\": \"e9d195fe8e\", \"requested_increase_amount\": 7500}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_10"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "approve_credit_limit_increase_5847"
+    },
+    "requestor": "assistant",
+    "action_id": "053_11"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "approve_credit_limit_increase_5847",
+      "arguments": "{\"credit_card_account_id\": \"cc_e9d195fe8e_silver\", \"user_id\": \"e9d195fe8e\", \"new_credit_limit\": 22500}"
+    },
+    "requestor": "assistant",
+    "action_id": "053_12"
+  },
+  {
+    "name": "give_discoverable_user_tool",
+    "arguments": {
+      "discoverable_tool_name": "get_card_last_4_digits"
+    },
+    "compare_args": [
+      "discoverable_tool_name"
+    ],
+    "requestor": "assistant",
+    "action_id": "053_13"
+  },
+  {
+    "name": "unlock_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829"
+    },
+    "requestor": "assistant",
+    "action_id": "053_14"
+  },
+  {
+    "name": "call_discoverable_agent_tool",
+    "arguments": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829",
+      "arguments": "{\"transaction_id\": \"txn_e9d195fe8e_001\", \"card_action\": \"keep_active\", \"card_last_4_digits\": \"2791\", \"full_name\": \"Daniel Park-Hernandez\", \"user_id\": \"e9d195fe8e\", \"phone\": \"480-555-0917\", \"email\": \"daniel.ph@outlook.com\", \"address\": \"7245 Mountain View Way, Scottsdale, AZ 85250\", \"contacted_merchant\": true, \"purchase_date\": \"10/10/2025\", \"issue_noticed_date\": \"10/31/2025\", \"dispute_reason\": \"goods_services_not_received\", \"resolution_requested\": \"full_refund\", \"eligible_for_provisional_credit\": true}"
+    },
+    "compare_args": [
+      "agent_tool_name"
+    ],
+    "requestor": "assistant",
+    "action_id": "053_15"
+  }
+]

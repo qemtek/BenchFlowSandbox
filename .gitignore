@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+
+# Run outputs: large, reproducible from a commit + digests. MLflow tracks them.
+jobs/
+mlruns/
+*.log
+
+# Local tooling
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

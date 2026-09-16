@@ -1,0 +1,14 @@
+[
+  {
+    "name": "transfer_to_human_agents",
+    "arguments": {
+      "reason": "customer_demands_after_unavailable_offer_refusal",
+      "summary": ""
+    },
+    "compare_args": [
+      "reason"
+    ],
+    "requestor": "assistant",
+    "action_id": "008_0"
+  }
+]
