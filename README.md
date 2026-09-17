@@ -220,6 +220,13 @@ python tools/run_experiment.py \
   --review                            # also grade against the rubric
 ```
 
+**Pass a dated model id if you want the snapshot pinned.** `claude-sonnet-4-5`
+is an alias pointing at whichever snapshot is current, so a run recorded under
+it does not say which weights answered. Dated ids pass straight through —
+BenchFlow's own default is `claude-haiku-4-5-20251001` — so this is your choice,
+not a constraint. The runner prints a note when the model looks like an alias
+and records `model_is_alias` either way, so a run is never silently ambiguous.
+
 ### What gets recorded
 
 **Params — everything needed to reproduce the setup:**
@@ -380,7 +387,7 @@ deprecated/             multi-turn scaffolding and why it does not work here
 
 ## Known limits
 
-Four, stated plainly because a rig that hides its limits is worse than one
+Three, stated plainly because a rig that hides its limits is worse than one
 without them.
 
 **Run-to-run variance is unmeasured.** Nothing here tells you the noise floor
@@ -390,10 +397,6 @@ defensible. This is the next thing worth doing.
 **The judge has never been checked against human labels.** Recording it
 carefully means the number is reproducible, not that it is right. Treat rubric
 results as a signal to investigate.
-
-**The model alias is a moving pointer.** `claude-sonnet-4-5` resolves to
-whichever snapshot is current, and BenchFlow does not record which. The weights
-behind a snapshot never change; the pointer can move.
 
 **There is no backup of the results.** `mlflow.db` and `mlartifacts/` are the
 durable store — `jobs/` is scratch — but both are local and gitignored.

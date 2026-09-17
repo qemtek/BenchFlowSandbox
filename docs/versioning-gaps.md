@@ -229,11 +229,12 @@ the job root. `total_cost_usd`, `total_tokens`, input/output token splits and
 
 ## 7. Known limits we cannot close here
 
-**The model alias.** `claude-sonnet-4-5` points at whichever snapshot is current.
-The weights behind a given snapshot never change, so the exposure is a version
-bump we did not ask for rather than drift under a fixed name. BenchFlow does not
-resolve the alias to a dated snapshot in anything it writes. Worth checking
-whether passing a dated model id works, and pinning it if so.
+**Closed 2026-09-17: the model alias.** Listed here twice as something to check.
+Checked: BenchFlow has no model whitelist — its own default is the dated
+`claude-haiku-4-5-20251001` — and the string passes through to ACP unchanged. So
+a dated snapshot id can be pinned whenever you want it, and using an alias is a
+choice rather than a limitation. `run_experiment.py` now prints a note when the
+model looks like an alias and logs `model_is_alias` on every run.
 
 **Run-to-run variance is unmeasured.** Not a versioning gap, but it bounds what
 versioning buys. Until the same commit is run several times and the spread is

@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tarfile
@@ -179,6 +180,17 @@ def main() -> int:
                     default="open")
     args = ap.parse_args()
 
+    # An alias like "claude-sonnet-4-5" points at whichever snapshot is current,
+    # and BenchFlow records only the string we passed. Dated ids pass straight
+    # through — its own default is one — so this is our choice, not a limit of
+    # the rig. Say so at the point of choosing rather than in a doc nobody reads
+    # mid-run.
+    model_is_alias = not re.search(r"-20\d{6}$", args.model)
+    if model_is_alias:
+        print(f"note: '{args.model}' is an alias, so this run does not record "
+              f"which snapshot answered.\n      Pass a dated id "
+              f"(e.g. {args.model}-20YYMMDD) to pin it.", file=sys.stderr)
+
     prov = collect(args.agent)
     if prov["git"]["dirty"] and not args.allow_dirty:
         print("Refusing to run: the working tree has uncommitted changes.\n",
@@ -243,6 +255,7 @@ def main() -> int:
             # so a score shift after a BenchFlow upgrade is attributable.
             "agent_harness": prov.get("agent_harness", "unknown"),
             "model": args.model,
+            "model_is_alias": str(model_is_alias).lower(),
             "skill_mode": args.skill_mode,
             "reasoning_effort": args.reasoning_effort or "harness-default",
             # Not settable through BenchFlow for ACP agents; fixed by the
