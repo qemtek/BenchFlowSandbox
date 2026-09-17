@@ -143,17 +143,24 @@ are running.
 ```bash
 benchflow eval compare-lift \
   --baseline jobs/<baseline-run> --trained jobs/<treatment-run> \
-  --out lift.md --json-out lift.json
+  --out lift.md --json-out lift.json --bootstrap-seed 0
 ```
 
 This pairs the rollouts by task and puts an interval around the delta. See
 [03-bootstrapping](03-bootstrapping.md) for reading that interval.
+
+For a comparison you intend to quote, run it through
+`python tools/compare_arms.py --baseline <run-id> --treatment <run-id>`, which
+wraps the same command and records the result as its own MLflow run. Two of the
+three failure modes below are things it refuses to do.
 
 Three ways it goes wrong:
 
 **Reusing a job directory.** BenchFlow resumes into an existing one and skips
 rollouts it considers done, so the second arm does nothing and you compare a set
 of rollouts against itself. The report looks clean and the delta sits near zero.
+`run_experiment.py` now refuses to start in a job directory that is not empty,
+which is the cheapest place to catch this.
 
 **Ignoring coverage.** Only tasks scored on both sides get paired. If an arm
 crashed on five, you are comparing 43, and crashes cluster on the long

@@ -36,6 +36,7 @@ import hashlib
 import json
 import pathlib
 import re
+import secrets
 import statistics
 import subprocess
 import sys
@@ -45,7 +46,12 @@ import time
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
-from provenance import ProvenanceError, agent_harness, collect  # noqa: E402
+from provenance import (  # noqa: E402
+    ProvenanceError,
+    agent_harness,
+    benchflow_python,
+    collect,
+)
 
 # MLflow 3.x put the filesystem store into maintenance mode; SQLite is the
 # supported local backend and is queryable, which suits comparing arms.
@@ -295,7 +301,7 @@ def finish_capture(proc, capture: pathlib.Path, jobs_dir: pathlib.Path) -> None:
         if not recorded:
             continue
         subprocess.run(
-            [provenance_python(), "-c",
+            [benchflow_python(), "-c",
              "import sys;from pathlib import Path;"
              "from benchflow.eval_artifacts import write_health_summary;"
              "write_health_summary(Path(sys.argv[1]), Path(sys.argv[2]))",
@@ -608,6 +614,12 @@ def main() -> int:
     ap.add_argument("--reasoning-effort", default="")
     ap.add_argument("--config-override", default="")
     ap.add_argument("--allow-dirty", action="store_true")
+    # Subscription auth means BenchFlow skips its own proxy and writes no
+    # llm_trajectory.jsonl. This runs ours instead, so a subscription run keeps
+    # the provider-side record — and keeps the credential out of the sandbox.
+    ap.add_argument("--capture-provider", action="store_true",
+                    help="capture provider traffic through tools/capture_proxy.py")
+    ap.add_argument("--capture-port", type=int, default=8787)
     ap.add_argument("--review", action="store_true",
                     help="grade the rollouts against the rubric and log the "
                          "result to the same MLflow run")
@@ -683,6 +695,12 @@ def main() -> int:
 
     cmd = build_cmd(args, tasks_path, jobs_dir, len(selected))
 
+    capture_proc = capture_path = None
+    if args.capture_provider:
+        capture_proc, capture_path, capture_env = start_capture(
+            jobs_dir, args.capture_port)
+        cmd += capture_env
+
     # Before the run starts, so a half-regenerated task set stops the run
     # rather than being discovered after the rollouts are paid for.
     briefing = briefing_identity(tasks_path, selected)
@@ -745,6 +763,12 @@ def main() -> int:
 
         log_path = jobs_dir / "run.log"
         log_path.write_text(proc.stdout + proc.stderr)
+
+        # Before any metric is read: attribution writes each rollout's
+        # llm_trajectory.jsonl and health.json is recomputed from it, so the
+        # coverage numbers logged below describe the run as it now stands.
+        if capture_proc is not None:
+            finish_capture(capture_proc, capture_path, jobs_dir)
 
         if args.trials > 1:
             metrics = log_trials(mlflow, jobs_dir, tasks_path, args, golds,

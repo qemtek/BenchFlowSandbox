@@ -12,8 +12,9 @@ commit, the pinned agent harness, the host interpreter and its dependency lock,
 plus BenchFlow and Docker versions. That covers the **inputs**. The gaps below
 are mostly about **outputs**, the **judge**, and **enforcement**.
 
-Status as of 2026-09-17: five of the seven are closed. What remains is one
-deferred decision, one process convention, and the variance measurement.
+Status as of 2026-09-17: seven of the nine are closed. What remains is one
+deferred decision, one process convention, and the variance measurement — and
+the last of those now has a mechanism waiting to be run.
 
 ---
 
@@ -147,6 +148,29 @@ and `prompts/`. It does not cover `tasks/`.
 BenchFlow computes a `task_digest` internally but does not emit it anywhere we
 keep. Confirmed absent from both `summary.json` and `results.jsonl`.
 
+**Correction, 2026-09-17.** That check was too narrow, and the conclusion drawn
+from it was wrong. `task_digest` is written to every rollout's `config.json`
+*and* `result.json` — both inside the archive we log, and `config.json` is the
+file this README already singles out as the reason the archive matters:
+
+```
+jobs/sub10/2026-09-16__20-48-18/task-004__8dbb5c10/config.json
+  "task_digest": "sha256:81af6b78…"
+```
+
+It is also exposed as `benchflow tasks digest`, pins releases in the dataset
+registry, and is recomputed by `benchflow review --tasks-root` — which we
+already pass — to decide whether a task may be admitted as evidence at all. So
+we had per-task digests, and digest *enforcement*, before we wrote any.
+
+What was genuinely missing is a run-level value to group runs by, and digests
+for everything outside a task package. `provenance.py` now asks BenchFlow for
+the per-task map and aggregates it, rather than hashing `tasks/` itself. Two
+reasons beyond not duplicating work: a per-task map says *which* task moved,
+and a hash of our own could disagree with the one recorded beside the rollout,
+which is worse than having none. `PROVENANCE_VERSION` is 3 — same content,
+different number, so runs either side of the change are distinguishable.
+
 So the tasks, which are the central artifact, are covered only by the whole-repo
 commit. That is the one thing the split-digest design was meant to avoid: any
 unrelated commit makes two task sets look different when they are identical.
@@ -155,16 +179,24 @@ Current practice treats the dataset like prompts:
 *"tag releases, freeze datasets for active CI gates, and review additions in
 PR"* ([2026 LLM Evaluation Playbook](https://futureagi.com/blog/llm-evaluation-playbook-2026/)).
 
-**Done:** `TRACKED` gains `tasks` (384 files across 48 packages), logged as
-`digest_tasks`. `digest_dir` now matches extensionless files by name so
-`environment/Dockerfile` is covered.
+**Done:** `digest_tasks` is the aggregate of BenchFlow's 48 per-task digests,
+with the full map logged as a `task-digests.json` artifact. `digest_dir` now
+matches extensionless files by name so `environment/Dockerfile` is covered in
+the three directories we still hash ourselves. An earlier version of this fix
+hashed `tasks/` with a suffix filter (`.md .json .py .sh Dockerfile`), which
+also meant any future file type in a task package — a skill, an extensionless
+fixture — would have been silently uncovered.
 
 Adding a digest changes `combined` for unchanged content, so `collect()` now
-reports `provenance_version` (currently 2). Runs either side of a schema change
+reports `provenance_version` (currently 3). Runs either side of a schema change
 are distinguishable rather than falsely different.
 
-**Still open:** tagging frozen task sets is a process decision, not code. Worth
-doing before any scored gate sets a threshold.
+**Still open:** tagging frozen task sets. The decision is ours — which snapshot
+to freeze — but the machinery is not: a dataset registry JSON pins per-task
+digests and `benchflow eval run --dataset <name>@<version> --registry <file>`
+verifies them before a run starts, using the same `task_digest` we now record.
+`benchflow tasks overlap` compares two manifests for task-id and digest overlap.
+Worth doing before any scored gate sets a threshold.
 
 ---
 
@@ -247,6 +279,98 @@ rollouts by task and reports deltas with bootstrap confidence intervals, which
 cancels task difficulty — most of the variance — without any repeats. Repeats
 are still needed for the residual noise floor, but the pairing is free.
 
+**Update 2026-09-17:** the repeats have a mechanism now.
+`run_experiment.py --trials N` delegates to BenchFlow's `--matrix`, which runs
+the arm N times into N separate job directories; each trial is a nested MLflow
+run and the parent carries `pass_rate_sd`, `pass_rate_spread`, min and max. The
+gap is no longer "we have no way to do this", it is "we have not run it yet".
+
+---
+
+## 8. The seam between BenchFlow and MLflow leaked  — DONE
+
+BenchFlow owns the data plane: tasks, rollouts, rewards, digests. MLflow owns
+the experimentation plane: which run, which arm, which number to cite. The split
+is clean in the direction that matters — nothing in `tasks/`, `vendor/` or any
+task config knows MLflow exists, so a task set stays portable and
+`benchflow eval run` remains a valid throwaway path.
+
+It leaked in the other direction. The tracking layer was reaching into the data
+plane's filesystem instead of consuming an interface it had asked for, four
+times, and one of them was a live defect:
+
+**Artifacts found by mtime.** The review report was located by globbing
+`jobs/review-*/review_report.json` across the whole repo and taking the newest.
+`benchflow review` has `--out-dir`; we were not passing it, so BenchFlow wrote
+`jobs/review-<ts>/` and we guessed which one was ours. A stale review directory,
+or a second run in flight, would have attached another run's judge scores to
+this one — logged as params, with a rubric digest, looking authoritative.
+`summarise()` had a milder version of the same habit, taking whichever
+`*/summary.json` had the newest mtime.
+
+**Facts recomputed rather than read.** The task digests, above.
+
+**Internals imported because the CLI does not expose them.** `agent_harness()`
+reads `benchflow.agents.registry` through BenchFlow's own interpreter, because
+`benchflow agent show` prints the launch path but not the install pin. That is
+still the only route, so the probe stays — but it used to return `"unknown"` on
+any failure, which degrades a provenance field into a plausible-looking string.
+
+**Task internals read directly.** `gold_action_count()` walked
+`verifier/gold.json` with `except Exception: pass`, so an unreadable gold file
+silently changed the denominator of a headline efficiency metric and made the
+agent look more efficient rather than broken.
+
+**Done:** every file the wrapper reads is now one it asked for at a path it
+chose — `--health-summary-out`, `--run-config-out`, `--task-manifest-out`,
+`benchflow review --out-dir`. `summarise()` refuses a job directory holding more
+than one evaluation rather than picking. Probes that cannot read what they claim
+to record raise; the run is tagged `provenance_complete=false` and says so on
+stderr instead of logging `"unknown"` quietly. `gold_action_count()` fails
+loudly. And the missing back-pointer is filled in both directions: `jobs_dir` is
+a param, and the job directory holds an `mlflow_run_id` file.
+
+One consequence worth stating plainly, because it changes how a number reads:
+`total_cost_usd` is `0.0` on every run so far. Under subscription auth there is
+no price source, so that zero means *unpriced*, not *free*, and
+`cost_per_solved_task_usd` inherits it. The validity flags now travel with the
+values — `telemetry_coverage` as a metric, `cost_priced` as a tag — so the two
+cases are distinguishable.
+
+---
+
+## 9. The provider side of every call was unrecorded  — DONE
+
+Not noticed until BenchFlow's own coverage metric was wired up and reported
+`missing_llm_trajectory: 1` on every rollout we had ever run.
+
+`trajectory/llm_trajectory.jsonl` is BenchFlow's record of each model call:
+request, response, per-call usage, and the dated snapshot that answered. It is
+written by the LiteLLM proxy, which authenticates upstream with an API key —
+so it is skipped under subscription auth, and the file never exists. Its
+absence blocks `benchflow train convert` and `benchflow eval continue`
+outright, and costs four things nothing else records: the exact context window
+per turn, per-call usage, provider failures, and the resolved model id. On the
+alias question in §7 this is the sharper statement: with no capture there is no
+dated id anywhere in a rollout, only the string we passed.
+
+**Done:** `tools/capture_proxy.py`, behind `--capture-provider`, described in
+[provider-capture](provider-capture.md). Two facts made
+it possible, both established by probe rather than assumption — Claude Code
+presents its subscription token to a custom `ANTHROPIC_BASE_URL`, and it works
+just as well when handed a dummy bearer while the real token is attached
+host-side. The second is why the proxy also removes an exposure that predates
+it: the credential no longer enters a container that has open network access.
+
+Verified on task-036: 33 exchanges captured, `health_missing_llm_trajectory`
+0 where every earlier run reported 1, and `benchflow train convert --row-mode
+exchange` producing 33 rows whose 37 tool calls match the rollout's own count.
+
+**Still open:** cost. A subscription call carries no price, so `response_cost`
+is null by design rather than a fabricated zero. The capture now holds exact
+per-call token counts, which is the input an estimate would need — see
+`docs/production-realism.md`.
+
 ---
 
 ## Order of work
@@ -259,8 +383,10 @@ are still needed for the residual noise floor, but the pairing is free.
 | 3 | record reasoning effort; document the sampling limit | done |
 | 5 | oracle gate as a pre-push hook | done |
 | 1 | back up the tracking store | deferred (test project) |
-| — | tag frozen task sets | open, process decision |
-| — | measure run-to-run variance | open, blocks a scored gate |
+| 8 | close the seam between the two planes | done |
+| 9 | capture the provider side on subscription auth | done |
+| — | tag frozen task sets | open, and `--dataset` is the tool for it |
+| — | measure run-to-run variance | open, mechanism exists (`--trials`) |
 
 After each: `python tools/check_oracles.py` must still report 48/48. The
 pre-push hook now enforces that.

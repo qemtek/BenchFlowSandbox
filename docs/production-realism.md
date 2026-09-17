@@ -103,9 +103,19 @@ calls_per_gold_action      tool calls / reference actions
 avg_tool_calls_per_task
 total_cost_usd             and cost_per_solved_task_usd
 total_tokens               input and output split out
+telemetry_coverage         whether those token counts can be believed
 ```
 
-Results now read as "whether, and at what cost".
+Results now read as "whether, and at what cost" — with one caveat that has to be
+stated rather than discovered later.
+
+**Cost is currently unpriced, not free.** Every run so far reports
+`total_cost_usd: 0.0`. Tokens are counted (`telemetry_coverage` is 1.0), but
+under subscription auth there is no price source attached to them, so the zero
+means *unpriced* and `cost_per_solved_task_usd` inherits it. The two cases are
+now distinguishable: runs carry a `cost_priced` tag, false when the figure is a
+placeholder. Until a priced route is used, read the token counts and
+`calls_per_gold_action` as the efficiency signal and ignore the dollar figures.
 
 **Not folded into the reward, deliberately.** Pass/fail stays a clean signal;
 efficiency sits beside it rather than multiplied into it. That also means an

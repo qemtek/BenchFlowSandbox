@@ -315,6 +315,8 @@ of another. So the wrapper exists to record a run, not to replace one. It calls
 - optionally runs `benchflow review` and folds the judge's per-criterion results
   into the same run
 - archives the whole job directory into that run
+- with `--capture-provider`, records the provider side of every call, which
+  BenchFlow cannot do under subscription auth
 
 Everything the wrapper reads is a file it asked BenchFlow to write, at a path it
 chose. That is a deliberate rule: the alternative — reading whatever the run
@@ -448,6 +450,80 @@ Inspect the current state any time:
 ```bash
 python tools/provenance.py --agent claude-agent-acp
 ```
+
+---
+
+## Capturing the provider side on a subscription
+
+**Not on by default.** Add `--capture-provider` to a run:
+
+```bash
+python tools/run_experiment.py --tasks tasks --capture-provider \
+  --experiment baseline --note "with provider capture"
+```
+
+### What it is for
+
+BenchFlow writes `trajectory/llm_trajectory.jsonl` — the request and response of
+every model call — by routing agents through its LiteLLM proxy. That proxy
+authenticates upstream with an API key, so it is skipped entirely under
+subscription auth: *"the only agents that skip the proxy are those that
+physically cannot be routed through it — oracle (no model) and native
+subscription auth (no API key to proxy)"*. The file is simply never written.
+
+Four things go missing with it, and nothing else in the run records them:
+
+- the exact context window per turn — the full message array and tool schemas
+  as sent, which is the direct evidence for every lever this rig varies
+- per-call token usage, rather than a rollout total
+- provider failures and retries — a 429 mid-rollout is otherwise invisible
+- **which snapshot answered.** `provider_model` is the resolved dated id. Without
+  the capture there is no dated id anywhere in a rollout, only the alias we
+  passed
+
+It also blocks `benchflow train convert` outright, and `benchflow eval continue`,
+both of which read that file and nothing else.
+
+`tools/capture_proxy.py` fills the gap. Claude Code honours `ANTHROPIC_BASE_URL`
+with subscription auth, so the agent's traffic is routed to a local proxy that
+forwards verbatim to `api.anthropic.com` and writes the record BenchFlow would
+have written.
+
+### What the runner does with it
+
+1. Starts the proxy on `--capture-port` (default 8787) with a per-run secret.
+2. Points the sandbox at it — `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>`
+   and `ANTHROPIC_AUTH_TOKEN=<run secret>` — via `--agent-env`.
+3. Runs the eval. Every call lands in `jobs/<run>/capture.jsonl`.
+4. Splits that capture per rollout into `trajectory/llm_trajectory.jsonl`, matching
+   calls to rollouts by the `<case_notes>` block echoed in each request. All 48
+   task keys are distinct and none contains another, so this holds at any
+   concurrency; a time window is the fallback.
+5. Regenerates `health.json` with BenchFlow's own writer, so
+   `health_missing_llm_trajectory` describes the run as it now stands.
+
+Verified end to end on task-036: 33 exchanges captured, `train convert
+--row-mode exchange` wrote 33 rows with 32 carrying tool calls, and the 37 tool
+calls in the export match the rollout's own `total_tool_calls` exactly.
+
+### It also takes the credential out of the sandbox
+
+On a normal subscription run the token has to be inside the container for the
+agent to authenticate, and these tasks run with `network_mode: public`. With
+capture on, the proxy holds the token on the host: the sandbox gets a per-run
+secret, the proxy checks it, strips it, and attaches the real credential on the
+way upstream. That is the property BenchFlow's own proxy has — the raw
+credential never reaches the agent.
+
+The proxy is deliberately narrow, because it listens on a port a sandbox can
+reach: upstream is hardcoded, so it cannot be redirected; only `POST
+/v1/messages*` is proxied; a request without the run secret is refused before
+any upstream call; and credentials are never written to the capture.
+
+**Cost still reads 0.00.** A subscription call carries no price, so
+`response_cost` is recorded as null rather than a fabricated zero. What the
+capture adds is exact per-call token usage — the input for an estimate, if you
+want one.
 
 ---
 
@@ -608,6 +684,7 @@ tools/
   run_experiment.py     tracked runs
   compare_arms.py       tracked comparisons between two runs
   provenance.py         digests, git state, harness and host pins
+  capture_proxy.py      provider-side capture for subscription runs
   document_tools.py     regenerates docs/tools.md
 data/banking_knowledge/ seed database, 698 documents, 97 τ² case files
 docs/                   the guides
@@ -651,6 +728,8 @@ in production. See [versioning-gaps](docs/versioning-gaps.md).
 - **[docs/02-tools.md](docs/02-tools.md)** — the MCP surface and toolsets
 - **[docs/03-skills.md](docs/03-skills.md)** — authoring and testing a skill
 - **[docs/tools.md](docs/tools.md)** — generated inventory of all 64 tools
+- **[docs/provider-capture.md](docs/provider-capture.md)** — recording what the
+  model actually saw, on a subscription
 - **[docs/production-realism.md](docs/production-realism.md)** — what is still
   unrealistic, ranked
 - **[docs/versioning-gaps.md](docs/versioning-gaps.md)** — what a run records,
