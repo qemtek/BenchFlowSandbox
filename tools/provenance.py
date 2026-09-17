@@ -160,6 +160,22 @@ def aggregate_digest(per_task: dict[str, str]) -> str:
     return "sha256:" + h.hexdigest()
 
 
+def run_neutral(path: str) -> bool:
+    """Whether an uncommitted path can change what a run means.
+
+    Prose cannot. The README already makes this argument for the digests --
+    "a colleague committing to docs/ moves git_commit and leaves all four
+    digests untouched" -- and the dirty check was the one place still treating
+    every path as equally load-bearing, so an edit to a guide blocked a run it
+    could not affect.
+
+    Fail closed: this names the paths known to be inert, and everything else
+    counts. A new top-level directory blocks a run until somebody decides it is
+    safe, which is the right default for a check whose whole job is attribution.
+    """
+    return path.startswith("docs/") or path == "README.md"
+
+
 def git_state() -> dict:
     """Commit and cleanliness. A dirty tree means the commit does not describe
     what actually ran, which is the one thing versioning must not allow."""
@@ -172,14 +188,22 @@ def git_state() -> dict:
             return ""
 
     dirty = run("status", "--porcelain")
+    # porcelain is "XY PATH"; split rather than slice, because run() strips the
+    # leading status column off the first line.
+    paths = [line.split(maxsplit=1)[-1]
+             for line in dirty.splitlines() if line.strip()]
+    ignored = [p for p in paths if run_neutral(p)]
+    blocking = [p for p in paths if not run_neutral(p)]
     return {
         "commit": run("rev-parse", "HEAD"),
         "branch": run("rev-parse", "--abbrev-ref", "HEAD"),
-        "dirty": bool(dirty),
-        # porcelain is "XY PATH"; split rather than slice, because run()
-        # strips the leading status column off the first line.
-        "dirty_files": [line.split(maxsplit=1)[-1]
-                        for line in dirty.splitlines() if line.strip()][:20],
+        # "dirty" means dirty in a way that changes what a run means. The
+        # documentation edits are reported separately rather than dropped: a
+        # run that ignored something still has to say what it ignored.
+        "dirty": bool(blocking),
+        "dirty_files": blocking[:20],
+        "dirty_ignored": ignored[:20],
+        "dirty_ignored_count": len(ignored),
     }
 
 
@@ -324,6 +348,11 @@ def main() -> int:
     if g["dirty"]:
         for f in g["dirty_files"]:
             print(f"           ~ {f}")
+    if g["dirty_ignored"]:
+        print(f"           {g['dirty_ignored_count']} uncommitted "
+              f"documentation file(s), which cannot change a result:")
+        for f in g["dirty_ignored"]:
+            print(f"           ~ {f}  (ignored)")
     units = {"tasks": "packages"}
     for name in ("tasks", *TRACKED):
         print(f"{name:13s}{data['digests'][name][:19]}…  "

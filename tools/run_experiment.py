@@ -652,13 +652,21 @@ def main() -> int:
 
     prov = collect(args.agent, tasks_path)
     if prov["git"]["dirty"] and not args.allow_dirty:
-        print("Refusing to run: the working tree has uncommitted changes.\n",
-              file=sys.stderr)
+        print("Refusing to run: the working tree has uncommitted changes to "
+              "files that change what a run means.\n", file=sys.stderr)
         for f in prov["git"]["dirty_files"]:
             print(f"    ~ {f}", file=sys.stderr)
         print("\nCommit them, or pass --allow-dirty to record an untrusted run.",
               file=sys.stderr)
         return 1
+    # Uncommitted prose does not change what a run means, so it does not block.
+    # It is still recorded: a run that waived something has to say what.
+    if prov["git"]["dirty_ignored"]:
+        print(f"note: ignoring {prov['git']['dirty_ignored_count']} "
+              f"uncommitted documentation file(s); they cannot change a result.",
+              file=sys.stderr)
+        for f in prov["git"]["dirty_ignored"]:
+            print(f"    ~ {f}", file=sys.stderr)
     # A probe that cannot read what it claims to record says so here rather
     # than logging a plausible "unknown" and letting the run look complete.
     for w in prov["warnings"]:
@@ -748,6 +756,9 @@ def main() -> int:
         })
         mlflow.set_tags({
             "dirty": str(prov["git"]["dirty"]).lower(),
+            # Prose edits that were waived. A run that ignored something says
+            # what it ignored, rather than presenting itself as fully clean.
+            "dirty_ignored": ",".join(prov["git"]["dirty_ignored"]) or "none",
             "note": args.note,
             "provenance_complete": str(not prov["warnings"]).lower(),
         })
