@@ -32,6 +32,7 @@ data plane already emits.
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import json
 import pathlib
@@ -241,6 +242,17 @@ def health_metrics(job_dir: pathlib.Path) -> tuple[dict, bool]:
         "health_coverage": (scored / total) if total else 0.0,
     }
     return metrics, bool(total) and scored == total
+
+
+def _stop_capture(proc) -> None:
+    """Terminate the capture proxy if it is still alive. Safe to call twice."""
+    if proc is None or proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
 
 
 def start_capture(jobs_dir: pathlib.Path, port: int) -> tuple:
@@ -593,6 +605,39 @@ def briefing_identity(tasks_path: pathlib.Path, selected: list[str]) -> dict:
     }
 
 
+def log_params_once(mlflow, run_id: str, params: dict) -> None:
+    """Log params, tolerating a run that already carries some of them.
+
+    MLflow refuses to change a param that is already set, which is right: a
+    param is meant to describe the run, and a run whose recorded commit changed
+    under it describes nothing. But a resumed arm legitimately runs under a
+    later commit, or a different concurrency, and that must neither crash the
+    run nor silently overwrite what the earlier rollouts ran under.
+
+    So: unchanged params are skipped, and a param that genuinely differs is
+    recorded beside the original under a `resume_` prefix. The original keeps
+    describing the rollouts it produced, and the difference is visible rather
+    than lost.
+    """
+    existing = mlflow.MlflowClient().get_run(run_id).data.params
+    fresh, changed = {}, {}
+    for key, value in params.items():
+        value = str(value)
+        if key not in existing:
+            fresh[key] = value
+        elif existing[key] != value:
+            changed[f"resume_{key}"] = value
+    if fresh:
+        mlflow.log_params(fresh)
+    if changed:
+        # Only the first resume can claim these names; a second one that
+        # differs again would be a third state, and one param cannot hold two.
+        mlflow.log_params({k: v for k, v in changed.items() if k not in existing})
+        print("  resumed under different conditions: "
+              + ", ".join(f"{k[len('resume_'):]} {existing[k[len('resume_'):]]}"
+                          f" → {v}" for k, v in changed.items()))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tasks", required=True, help="task dir, or a set root")
@@ -741,6 +786,13 @@ def main() -> int:
         capture_proc, capture_path, capture_env = start_capture(
             jobs_dir, args.capture_port)
         cmd += capture_env
+        # The proxy holds the subscription token and listens on a port. Without
+        # this it outlives any failure between here and finish_capture: a
+        # credential-bearing listener left running, and a port the next run
+        # cannot bind. atexit covers the exception path; finish_capture on the
+        # success path has already terminated it by then, and terminate() on a
+        # dead process is a no-op.
+        atexit.register(_stop_capture, capture_proc)
 
     # Before the run starts, so a half-regenerated task set stops the run
     # rather than being discovered after the rollouts are paid for.
@@ -748,7 +800,7 @@ def main() -> int:
 
     with mlflow.start_run(run_id=resume_run_id) as run:
         # Params: everything needed to reproduce this run exactly.
-        mlflow.log_params({
+        log_params_once(mlflow, run.info.run_id, {
             **briefing,
             "git_commit": prov["git"]["commit"],
             "git_branch": prov["git"]["branch"],
