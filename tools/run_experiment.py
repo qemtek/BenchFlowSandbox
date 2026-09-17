@@ -614,6 +614,10 @@ def main() -> int:
     ap.add_argument("--reasoning-effort", default="")
     ap.add_argument("--config-override", default="")
     ap.add_argument("--allow-dirty", action="store_true")
+    ap.add_argument("--resume", default="",
+                    help="finish an interrupted arm: an existing jobs dir, "
+                         "whose completed rollouts are kept and whose MLflow "
+                         "run is reused")
     # Subscription auth means BenchFlow skips its own proxy and writes no
     # llm_trajectory.jsonl. This runs ours instead, so a subscription run keeps
     # the provider-side record — and keeps the credential out of the sandbox.
@@ -684,17 +688,46 @@ def main() -> int:
         )
     mlflow.set_experiment(args.experiment)
 
-    stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
-    jobs_dir = REPO / "jobs" / f"mlf-{stamp}"
-    # BenchFlow resumes into a job directory that already holds results and
-    # skips the rollouts it considers done. That is useful and, for an arm,
-    # fatal: the second arm inherits the first one's rollouts and the
-    # comparison is of an arm against itself. The README said so; this enforces
-    # it, the same way the dirty-tree check enforces the commit rule.
-    if jobs_dir.exists() and any(jobs_dir.iterdir()):
-        print(f"Refusing to run: {rel_to_repo(jobs_dir)} is not empty.",
-              file=sys.stderr)
-        return 1
+    # Resuming is opt-in and names its directory. An arm that was interrupted
+    # -- the machine slept, the process was killed -- otherwise has no recovery
+    # path at all, and re-running it from scratch discards rollouts that
+    # completed cleanly.
+    #
+    # The danger the guard below exists for is the *accidental* resume: a
+    # second arm pointed at the first arm's directory inherits its rollouts and
+    # compares an arm against itself. Naming the directory explicitly is the
+    # difference between that and finishing the arm you meant to finish.
+    # BenchFlow adds its own protection underneath: it refuses to resume a
+    # directory whose completed rollouts ran a different agent.
+    resume_run_id = None
+    if args.resume:
+        jobs_dir = (REPO / args.resume if not args.resume.startswith("/")
+                    else pathlib.Path(args.resume))
+        if not jobs_dir.is_dir():
+            print(f"Refusing to resume: {args.resume} is not a directory.",
+                  file=sys.stderr)
+            return 1
+        # Land the metrics on the run that owns these rollouts rather than
+        # minting a second run for one arm.
+        id_file = jobs_dir / "mlflow_run_id"
+        if id_file.is_file():
+            resume_run_id = id_file.read_text().strip()
+        print(f"resuming {rel_to_repo(jobs_dir)}"
+              + (f" into mlflow run {resume_run_id[:8]}" if resume_run_id else
+                 " (no mlflow run recorded; a new one will be created)"))
+    else:
+        stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
+        jobs_dir = REPO / "jobs" / f"mlf-{stamp}"
+        # BenchFlow resumes into a job directory that already holds results and
+        # skips the rollouts it considers done. That is useful and, for an arm,
+        # fatal: the second arm inherits the first one's rollouts and the
+        # comparison is of an arm against itself. The README said so; this
+        # enforces it, the same way the dirty-tree check enforces the commit
+        # rule.
+        if jobs_dir.exists() and any(jobs_dir.iterdir()):
+            print(f"Refusing to run: {rel_to_repo(jobs_dir)} is not empty.",
+                  file=sys.stderr)
+            return 1
     jobs_dir.mkdir(parents=True, exist_ok=True)
 
     alias = re.sub(r"[^A-Za-z0-9._-]", "-", args.model)
@@ -713,7 +746,7 @@ def main() -> int:
     # rather than being discovered after the rollouts are paid for.
     briefing = briefing_identity(tasks_path, selected)
 
-    with mlflow.start_run() as run:
+    with mlflow.start_run(run_id=resume_run_id) as run:
         # Params: everything needed to reproduce this run exactly.
         mlflow.log_params({
             **briefing,
