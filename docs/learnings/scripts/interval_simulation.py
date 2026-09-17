@@ -12,7 +12,7 @@ import random
 
 N = 48          # tasks per arm, matching the live set
 RUNS = 2000     # simulated experiments per scenario
-BOOT = 400      # bootstrap resamples per experiment
+BOOT = 1000     # bootstrap resamples, matching compare-lift's default
 
 
 def one_experiment(p_improve: float, p_regress: float) -> tuple[int, int]:
@@ -33,7 +33,7 @@ def bootstrap_ci(improved: int, regressed: int) -> tuple[float, float]:
     deltas = sorted(
         sum(random.choice(pool) for _ in range(N)) / N for _ in range(BOOT)
     )
-    return deltas[int(0.025 * BOOT)], deltas[int(0.975 * BOOT)]
+    return deltas[int(0.025 * (BOOT - 1))], deltas[int(0.975 * (BOOT - 1))]
 
 
 def resample_count_demo() -> None:
@@ -45,7 +45,7 @@ def resample_count_demo() -> None:
     def ci(b):
         d = sorted(sum(random.choice(pool) for _ in range(N)) / N
                    for _ in range(b))
-        return d[int(0.025 * b)], d[int(0.975 * b)]
+        return d[int(0.025 * (b - 1))], d[int(0.975 * (b - 1))]
 
     print("\nB. Same data, different resample counts (10 repeats each)")
     for b in (100, 1000, 10000):
@@ -57,14 +57,21 @@ def resample_count_demo() -> None:
 
 
 def degenerate_demo() -> None:
-    """Too few differing tasks: the interval collapses toward a point."""
+    """Too few differing tasks: the interval collapses toward a point.
+
+    Uses more resamples than the rest of this file. At BOOT the endpoints here
+    still move between seeds, for the reason section B gives, and these two are
+    quoted in the page.
+    """
+    steady = 20000
     random.seed(23)
     for differing in (1, 2):
         pool = [1] * differing + [0] * (N - differing)
         deltas = sorted(
-            sum(random.choice(pool) for _ in range(N)) / N for _ in range(BOOT)
+            sum(random.choice(pool) for _ in range(N)) / N for _ in range(steady)
         )
-        lo, hi = deltas[int(0.025 * BOOT)], deltas[int(0.975 * BOOT)]
+        lo, hi = (deltas[int(0.025 * (steady - 1))],
+                  deltas[int(0.975 * (steady - 1))])
         print(f"   {differing} task differs of {N}:   "
               f"{lo * 100:+.1f}pp to {hi * 100:+.1f}pp"
               if differing == 1 else

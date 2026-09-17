@@ -81,12 +81,12 @@ interval. It steadies the endpoints:
 
 ```
 same data, ten repeats each
-B=100      low  -0.8pp (varies by 4.2)   high +17.7pp (varies by 6.2)
+B=100      low  -0.8pp (varies by 4.2)   high +16.5pp (varies by 4.2)
 B=1000     low  -0.2pp (varies by 2.1)   high +18.8pp (varies by 0.0)
 B=10000    low  +0.0pp (varies by 0.0)   high +18.8pp (varies by 0.0)
 ```
 
-At B=100 the upper endpoint moves by 6 points between runs on identical data,
+At B=100 the upper endpoint moves by 4 points between runs on identical data,
 which is an artefact of the resampling rather than anything in the experiment.
 By 1,000 it has settled, so the default is fine.
 
@@ -135,8 +135,8 @@ The gap between them is large. Simulating a genuine 10-point improvement on a
 48-task paired comparison, and counting how often the interval keeps zero out:
 
 ```
-zero outside the range:   51% of runs
-zero inside the range:    49% of runs
+zero outside the range:   48% of runs
+zero inside the range:    52% of runs
 ```
 
 A real 10-point gain leaves zero inside the range about half the time. Treating
@@ -200,13 +200,13 @@ Three defences, cheapest first:
 collapses toward a point:
 
 ```
-1 task differs of 48:    +0.0pp to  +8.3pp
-2 tasks differ of 48:    +0.0pp to +10.4pp
+1 task differs of 48:   +0.0pp to  +6.2pp
+2 tasks differ of 48:   +0.0pp to +10.4pp
 ```
 
 Both lower bounds are zero, because most resamples miss the differing task
-entirely. The upper bound of 8.3pp is 4/48, which is what you get when a
-resample happens to draw that one task four times.
+entirely. The upper bound of 6.2pp is 3/48, which is what you get when a
+resample happens to draw that one task three times.
 
 An interval that cannot go below zero is not evidence that the change helped. It
 reflects having almost no data on the question.

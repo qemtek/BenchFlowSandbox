@@ -97,31 +97,79 @@ The measurements that can carry a result:
 
 ## How it is measured
 
-Two runs, same commit, separate job directories:
+Two runs, same commit, separate job directories (BenchFlow resumes into an
+existing one and would compare the arm against itself).
+
+### The half-set, and why
+
+The first attempt ran all 48 tasks in one arm and lost 27 of them to
+`provider_rate_limit`, so it scored 21 and could not be compared with anything.
+The subscription cap is a six-hour rolling window, so concurrency does not help:
+total volume is the only lever. Both arms over 24 tasks answers more than one
+broken arm over 48.
+
+`tools/half_set.txt` holds the 24, chosen before either arm ran by a rule with
+no room for judgement: sort every task by its gold action count, ties broken by
+id, and take every second one. That makes the half-set span the difficulty range
+in the same proportions as the full set rather than accidentally collecting the
+short tasks.
+
+```
+set         n  golds   mean  min  max   med
+full       48    575   12.0    1   34  12.5
+half-set   24    279   11.6    1   25  12.0
+```
+
+Recorded here rather than in a shell history, because a task subset chosen after
+seeing results is not a subset, it is a selection.
+
+### The runs
 
 ```bash
 python tools/run_experiment.py --tasks tasks --skill-mode no-skill \
-  --experiment skills --note "003 baseline" --review
-python tools/run_experiment.py --tasks tasks --skill-mode with-skill \
-  --experiment skills --note "003 bank-case-handling" --review
+  --model claude-sonnet-4-5-20250929 --capture-provider --concurrency 8 \
+  $(sed 's/^/--include /' tools/half_set.txt | tr '\n' ' ') \
+  --experiment skills --note "003 baseline, 24-task half-set"
 
-benchflow eval compare-lift \
-  --baseline jobs/<baseline-run> --trained jobs/<skill-run> \
-  --out lift.md --json-out lift.json
+python tools/run_experiment.py --tasks tasks --skill-mode with-skill \
+  --model claude-sonnet-4-5-20250929 --capture-provider --concurrency 8 \
+  $(sed 's/^/--include /' tools/half_set.txt | tr '\n' ' ') \
+  --experiment skills --note "003 treatment, 24-task half-set"
+
+python tools/compare_arms.py --baseline <run-id> --treatment <run-id> \
+  --note "bank-case-handling on the 24-task half-set"
 ```
 
-Separate job directories, or BenchFlow resumes into the first and compares the
-arm against itself.
+`--review` is deliberately not passed. It is 24 more rollouts per arm and it is
+the half that can be deferred at no loss: `benchflow review` grades the archived
+job directory whenever there is headroom, for the same result.
 
-Read `total_skill_invocations` on the treatment arm before anything else. If it
-is zero the skill never deployed, and nothing else in the run says whether the
-skill works.
+The model is pinned. The capture on the failed attempt resolved the alias to
+`claude-sonnet-4-5-20250929`, which is the only place that id has ever appeared
+in this project, so there is no longer an excuse for recording an alias.
 
-Both arms are graded under the 001 rubric and carry the same
-`briefing_prompt_uri`, so the only difference between them is the skill.
+### What to read, in order
 
-The oracle gate cannot test this. `check_oracles.py` never runs an agent, so
-skills are the one lever here with no cheap deterministic check.
+1. `health_coverage` and `errored` on **both** arms. The failed attempt scored
+   21 of 48 and still printed a pass rate. Anything below full coverage means
+   the rest of the numbers describe a different experiment from the one
+   intended.
+2. `total_skill_invocations` on the treatment arm. At zero the skill never
+   deployed and nothing else in the run bears on whether it works.
+3. `compare_arms.py`, which refuses arms that did not ask the same questions
+   and reports the interval rather than the point estimate.
+
+### The floor, at this size
+
+Paired standard error on 48 tasks is 3.67pp. Halving the task count widens it
+by roughly √2, to about 5.2pp, so a pass-rate effect needs something like 5 of
+the 24 tasks to flip before the interval clears zero.
+
+The four failures this skill targets are 2 of the 24 in the half-set. So
+`pass_rate` cannot settle this, and it was never going to: the per-rollout
+review criteria and `calls_per_gold_action` are the measurements with the
+resolution to see an effect, and the review is now deferred. State plainly in
+the Result section that the deterministic arm is underpowered by construction.
 
 ## Result
 

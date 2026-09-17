@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evidence for 04-mcnemar.md.
+"""Evidence for 04-the-six-task-floor.md and 05-mcnemar.md.
 
 Checks the page's claims about comparing two configurations on the same
 pass/fail tasks, rather than leaving them to be taken on trust. Each section
@@ -65,6 +65,34 @@ def floor_demo() -> None:
         print(f"   {wins} to 0   p = {p:.3f}{mark}")
 
 
+def threshold_demo() -> None:
+    """The floor is set by the threshold, not by anything about the task set."""
+    print("\nB2. Flips needed to clear other thresholds, nothing flipping back")
+    for alpha, sided in ((0.10, 2), (0.05, 2), (0.05, 1), (0.01, 2)):
+        flips = next(
+            b for b in range(1, 30)
+            if (exact_p(b, 0) if sided == 2 else exact_p(b, 0) / 2) < alpha
+        )
+        print(f"   p < {alpha:.2f}, {'two' if sided == 2 else 'one'}-sided"
+              f"   {flips} flips")
+
+    print("\nB3. Smallest split that clears 0.05 once tasks flip back")
+    for losses in range(0, 4):
+        wins = next(w for w in range(1, 40) if exact_p(w, losses) < 0.05)
+        print(f"   {losses} flipping back   {wins} to {losses}   "
+              f"p = {exact_p(wins, losses):.3f}")
+
+
+def set_size_demo() -> None:
+    """The floor is a property of the disagreements, not of the task set."""
+    print("\nB4. The same disagreements inside task sets of different sizes")
+    for tasks in (10, 48, 1000):
+        for wins in (5, 6):
+            delta = wins / tasks * 100
+            print(f"   {tasks:4d} tasks   {wins} to 0   p = {exact_p(wins, 0):.3f}   "
+                  f"gap {delta:+.1f}pp")
+
+
 def agreement_demo() -> None:
     """How often the two methods reach the same verdict."""
     print("\nC. Verdicts compared, over simulated experiments")
@@ -107,5 +135,7 @@ def degenerate_demo() -> None:
 if __name__ == "__main__":
     p_value_table()
     floor_demo()
+    threshold_demo()
+    set_size_demo()
     agreement_demo()
     degenerate_demo()

@@ -5,10 +5,9 @@ over the same set of pass/fail tasks, really differ. It answers with a yes or a
 no rather than a size: either the gap between them is larger than chance would
 ordinarily produce, or this experiment cannot say.
 
-An **arm** is one complete configuration (prompt, toolset, skill mode, model,
-harness) run over the task set. A **percentage point** is an absolute gap
-between two percentages, so a move from 60% to 68% is a rise of 8 percentage
-points.
+[Page 04](04-the-six-task-floor.md) covers one case of this test, where every
+task that changed hands went the same way. This page covers the general case,
+where some went each way, and gives the p-value for any split.
 
 Figures come from `python docs/learnings/scripts/mcnemar_simulation.py`.
 
@@ -98,53 +97,46 @@ evidence buys.
 
 ---
 
-## Six disagreements is the floor
+## The bar when every disagreement goes one way
 
-```
-1 to 0   p = 1.000
-2 to 0   p = 0.500
-3 to 0   p = 0.250
-4 to 0   p = 0.125
-5 to 0   p = 0.062
-6 to 0   p = 0.031
-7 to 0   p = 0.016
-```
+The table above starts at four disagreements because of what happens below that.
+A comparison in which every disagreement favours the same arm still needs six of
+them to reach 0.05, and that bar holds whatever the size of the task set.
 
-Five tasks flipping to the treatment, with nothing flipping back, gives 0.062
-and falls short. Six gives 0.031 and clears.
-
-That floor does not move with the size of the task set. The test sees only the
-disagreements, so running 480 tasks instead of 48 does not lower the bar. It
-makes disagreements more likely to accumulate, which is a different thing. Below
-six flips all in one direction, no comparison of this kind reaches the usual
-threshold, whatever the size of the reported gap.
+[Page 04](04-the-six-task-floor.md) derives that number and works through what
+follows from it.
 
 ---
 
 ## How the test compares with the interval
 
-The comparison already reported by `compare-lift` is a bootstrap confidence
-interval, covered in [page 03](03-bootstrapping.md). It answers a different
-question, "how much would this difference move on a different set of tasks",
-and treats a result as real when the interval excludes zero.
+`compare-lift` already reports a bootstrap confidence interval, covered in
+[page 03](03-bootstrapping.md). It treats a difference as real when the interval
+excludes zero. McNemar's test treats a difference as real when the p-value falls
+below 0.05. The two can be run on the same data, so it is worth knowing when
+they part company.
 
-Simulating 20,000 experiments under three scenarios, and counting how often each
-method calls the difference real:
+They part company in one direction only. Across 20,000 simulated experiments,
+there was no case where McNemar called a difference real and the interval did
+not. The test is the stricter of the two everywhere.
+
+Strictness is a trade, and the simulation prices it. Each row is 20,000
+experiments on 48 tasks, counting how often each method called the difference
+real:
 
 ```
-no real difference   interval  4.6%   McNemar  0.6%   McNemar without the interval  0.0%
-real 4-point gain    interval 13.2%   McNemar  2.9%   McNemar without the interval  0.0%
-real 10-point gain   interval 45.8%   McNemar 28.4%   McNemar without the interval  0.0%
+                        interval says real    McNemar says real
+two arms genuinely
+equal                          4.6%                 0.6%
+
+treatment genuinely
+10 points better              45.8%                28.4%
 ```
 
-The last column is zero in every row: McNemar's test never calls a difference
-real when the interval does not. It is the stricter of the two throughout.
-
-Strictness cuts both ways. On the top row, where the two arms are genuinely
-equal, the test raises a false alarm 0.6% of the time against the interval's
-4.6%. On the bottom row, where a real 10-point gain exists, it finds that gain
-28% of the time against the interval's 46%. Being hard to fool and being easy to
-convince are the same dial.
+The top row counts false alarms, where the methods differ by 4 points and
+McNemar is the safer one. The bottom row counts real gains found, where they
+differ by 17 points and the interval is the more useful one. A method cannot be
+moved down the first column without also moving down the second.
 
 ---
 
@@ -182,8 +174,9 @@ contributes nothing.
 **It assumes one run per task.** Run a task several times and the flips stop
 being independent, which the arithmetic above relies on.
 
-**It cannot rescue a small experiment.** Being told that six disagreements are
-needed does not produce them. The remedy is more tasks, or a larger change.
+**It cannot rescue a small experiment.** When the arms disagree on four tasks,
+the test reports that four is not enough, which you already knew. Getting past
+the floor takes more tasks, or a change large enough to flip more of them.
 
 ---
 
@@ -214,6 +207,7 @@ disagreement counts a 48-task set produces.
 
 ## Related
 
-- [01-standard-error.md](01-standard-error.md) — how large a gap has to be
+- [01-standard-error.md](01-standard-error.md) — the vocabulary used here
+- [04-the-six-task-floor.md](04-the-six-task-floor.md) — the special case this test generalises
 - [03-bootstrapping.md](03-bootstrapping.md) — the interval this test sits beside
 - [scripts/mcnemar_simulation.py](scripts/mcnemar_simulation.py) — the figures above
