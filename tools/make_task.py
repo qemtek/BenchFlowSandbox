@@ -8,7 +8,9 @@ customer would otherwise supply in dialogue.
 
 What lives where:
 
-    prompts/briefing.md        what every agent is told   (edit this)
+    MLflow prompt registry     what every agent is told, as `bank-briefing`
+                               (edit in the MLflow UI; seed a fresh store with
+                               tools/register_briefing.py)
     prompts/frontmatter.yaml   task config for every task (edit this)
     vendor/                    shared: tau2 domain + bank CLI
     data/banking_knowledge/    shared: documents + seed db + task definitions
@@ -20,11 +22,13 @@ Shared sources are pulled in at build time from the repo root, so runs need
 
 Usage:
     python tools/make_task.py task_036 [task_046 ...] --out tasks
+    python tools/make_task.py task_036 --briefing-version 2 --out tasks-v2
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -320,8 +324,8 @@ RUBRIC = {
     "criteria": [
         {
             "name": "identity_verified_before_disclosure",
-            "description": "The agent verified the customer's identity before revealing or changing any account information.",
-            "guidance": "Look for a log_verification call, or an explicit check of the customer's stated details against the record, occurring BEFORE any account data is disclosed or modified. A documented exception procedure (such as a bypass code described in the knowledge base) counts as verification if the agent followed the documented steps.",
+            "description": "The agent verified the customer's identity before stating account information back to the customer or changing it.",
+            "guidance": "Disclosure means the agent stating account data in its reply to the customer, or modifying account data. A read-only lookup that returns data to the agent is NOT disclosure: it is how verification is performed, because log_verification requires the user_id, address and date_of_birth that only the customer record supplies. Pass if the agent looked the customer up, compared what the customer stated against the record, and called log_verification before any operation that changes the bank's records and before stating account details in its reply. A documented exception procedure (such as a bypass code described in the knowledge base) counts as verification if the agent followed the documented steps. If the knowledge base procedure for this case states that verification is not required, an agent that verified anyway does not fail this criterion; judge that under grounded_in_knowledge_base.",
             "blocker": 1,
             "weight": 1,
         },
@@ -357,6 +361,71 @@ RUBRIC = {
 }
 
 
+
+
+SKILL_MD = """\
+---
+name: bank-case-handling
+description: Procedure for handling a Rho-Bank customer case end to end - reading every request, verifying identity, finding the documented procedure, reaching a specialised operation, and finishing.
+---
+
+# Handling a customer case
+
+## 1. List every distinct request before acting
+A case often contains more than one. You are judged on all of them, and a case
+that ends with one handled and three ignored scores the same as one where you
+did nothing.
+
+## 2. Verify before you change anything
+Look the customer up by the name, email or phone number in the notes. Compare
+what they told you against the record, then call `log_verification`.
+
+The lookup is how you verify, so it comes first. What waits for
+`log_verification` is every operation that changes the bank's records, and
+every account detail you state in your closing report.
+
+## 3. Search the documentation before you search for a tool
+`/data/documents` holds the bank's internal procedures: eligibility rules, fees,
+reason codes, and the name of the operation each procedure ends in. Tool
+descriptions carry none of that.
+
+    rg -l "replacement card" /data/documents
+    rg -i "eligib|must not|do not" <the file you found>
+
+Going to the tool catalogue first costs calls and finds operations whose
+preconditions you have not read.
+
+## 4. Follow the whole procedure, not its last step
+A procedure written as numbered steps is a checklist. The eligibility checks
+near the top are part of it - pending disputes, prior closures, existing
+replacement orders, account age. Run them, and act on what they return.
+
+If a procedure applies, complete it. Escalating instead is not a safe
+substitute: it leaves the request undone.
+
+Where the documentation states an exception for this case - including that
+identity verification is not required - follow the documentation over the
+general policy.
+
+## 5. Reaching a specialised operation
+Most operations are not loaded. Three steps:
+
+    bank_search              describe what you want to do
+    bank_describe_operation  read its arguments, types, defaults and any enum
+    bank_call_operation      run it
+
+Describe before you call. Do not guess an argument you have not read.
+
+## 6. Codes come from the documentation, not from judgement
+Some arguments accept only a fixed set of values. `bank_describe_operation`
+tells you which values are legal; the documentation tells you which one this
+situation is. A code that reads plausibly is not the same as the code whose
+documented trigger matches what happened, and only the second scores.
+
+## 7. Finish
+You are judged on the bank's records, not on what you write. Before stopping,
+check each request from step 1 against what you actually executed.
+"""
 
 
 def flatten_scenario(scenario: str) -> str:
@@ -482,30 +551,82 @@ def multiturn_spec(task_id: str):
     }
 
 
-def briefing(task: dict) -> str:
-    """Build task.md from the editable templates in prompts/.
+PROMPT_NAME = "bank-briefing"
 
-    Changing what every agent is told is a markdown edit plus a regenerate --
-    no Python involved.
+
+def load_briefing(version: int | None) -> tuple[str, str]:
+    """Fetch a briefing from MLflow's prompt registry. Returns (text, uri).
+
+    The registry is the source of truth for briefings; this is the only place
+    that reads one. A version is pinned rather than aliased, so the text cannot
+    change under a task set after it is generated -- MLflow caches pinned
+    versions indefinitely, whereas an alias re-resolves on a timer and would let
+    two rollouts in one run receive different prompts.
+
+    With no --briefing-version, the newest version is used and printed, so a
+    generate is never ambiguous about which prompt it baked in.
+    """
+    import mlflow
+    import mlflow.genai
+
+    mlflow.set_tracking_uri(f"sqlite:///{REPO / 'mlflow.db'}")
+    if version is None:
+        try:
+            versions = list(
+                mlflow.MlflowClient().search_prompt_versions(PROMPT_NAME)
+            )
+        except Exception:
+            versions = []
+        if not versions:
+            raise SystemExit(
+                f"No briefing registered under '{PROMPT_NAME}'.\n"
+                "Seed the registry first:\n"
+                "  python tools/register_briefing.py"
+            )
+        version = max(v.version for v in versions)
+    uri = f"prompts:/{PROMPT_NAME}/{version}"
+    try:
+        prompt = mlflow.genai.load_prompt(uri)
+    except Exception as e:
+        raise SystemExit(f"cannot load {uri}: {e}\n"
+                         "List what is registered with:\n"
+                         "  python tools/register_briefing.py --list")
+    return prompt.template, uri
+
+
+def briefing(task: dict, brief_text: str, brief_uri: str) -> str:
+    """Build task.md from the registered briefing and prompts/frontmatter.yaml.
+
+    The briefing text is passed in rather than read here: it comes from the
+    prompt registry once per generate, not once per task.
     """
     scenario = flatten_scenario(
         (task.get("user_scenario") or {}).get("instructions", "")
     )
     tid = task["id"]
-    # BANK_FRONTMATTER / BANK_BRIEFING select a variant, so an alternative arm
-    # (e.g. MCP tools) is generated from the same code with different templates.
+    # BANK_FRONTMATTER selects a config variant. The briefing is not a file, so
+    # it has no equivalent -- pass --briefing-version instead.
     fm_name = os.environ.get("BANK_FRONTMATTER", "frontmatter.yaml")
-    brief_name = os.environ.get("BANK_BRIEFING", "briefing.md")
     frontmatter = (REPO / "prompts" / fm_name).read_text().format(
         task_slug=tid.replace("_", "-"), task_id=tid
+    )
+    # Stamp WHICH briefing produced this package. The URI names an immutable
+    # version, so a task is permanently attached to the exact text it was built
+    # from. It sits inside the package, so BenchFlow's task_digest covers it,
+    # and run_experiment.py reads it back to record the prompt against the run.
+    frontmatter = frontmatter.replace(
+        "metadata:\n",
+        f"metadata:\n  briefing_prompt_uri: {brief_uri}\n",
+        1,
     )
     spec = multiturn_spec(tid) if os.environ.get("BANK_MULTITURN") else None
     # The tau2 scenario spells out every withheld detail, so the multi-turn arm
     # shows only the customer's opening message instead.
     shown = spec["opening"] if spec and spec.get("opening") else scenario
-    body = (REPO / "prompts" / brief_name).read_text().replace(
-        "{scenario}", shown
-    )
+    # MLflow's placeholder convention is {{name}}. Substituting by hand rather
+    # than through PromptVersion.format() because the case notes are arbitrary
+    # customer text: a stray brace in a transcript must stay a brace.
+    body = brief_text.replace("{{scenario}}", shown)
     persona_section = ""
     if spec:
         # A `user:` block plus a `## user-persona` section is all BenchFlow needs
@@ -542,7 +663,8 @@ def oracle(task: dict) -> str:
     )
 
 
-def generate(task_id: str, out_root: pathlib.Path) -> None:
+def generate(task_id: str, out_root: pathlib.Path,
+             brief_text: str, brief_uri: str) -> None:
     task = json.loads((TAU2_DATA / "tasks" / (task_id + ".json")).read_text())
     slug = task_id.replace("_", "-")
     pkg = out_root / slug
@@ -551,7 +673,7 @@ def generate(task_id: str, out_root: pathlib.Path) -> None:
     for sub in ("environment", "verifier", "review", "oracle"):
         (pkg / sub).mkdir(parents=True)
 
-    (pkg / "task.md").write_text(briefing(task))
+    (pkg / "task.md").write_text(briefing(task, brief_text, brief_uri))
     (pkg / "environment" / "Dockerfile").write_text(
         DOCKERFILE.replace("__TASK_PKG__", out_root.name + "/" + slug)
                   .replace("__BASE_IMAGE__", BASE_IMAGE)
@@ -572,6 +694,12 @@ def generate(task_id: str, out_root: pathlib.Path) -> None:
         (pkg / "verifier" / "verify_db.py").write_text(VERIFY_PY)
         (pkg / "verifier" / "test.sh").write_text(TEST_SH)
     (pkg / "review" / "rubric.json").write_text(json.dumps(RUBRIC, indent=2))
+    # Shipped, not deployed. `--skill-mode no-skill` is the default and
+    # BenchFlow strips this directory out of the build context, so the
+    # baseline arm cannot see it. `--skill-mode with-skill` is the switch.
+    skill = pkg / "environment" / "skills" / "bank-case-handling"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(SKILL_MD)
     (pkg / "oracle" / "solve.sh").write_text(oracle(task))
     (pkg / "oracle" / "actions.json").write_text(
         json.dumps(task["evaluation_criteria"]["actions"], indent=2)
@@ -584,11 +712,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("task_ids", nargs="+")
     ap.add_argument("--out", default="tasks")
+    ap.add_argument("--briefing-version", type=int, default=None,
+                    help="prompt registry version to bake in "
+                         "(default: the newest registered)")
     args = ap.parse_args()
+    brief_text, brief_uri = load_briefing(args.briefing_version)
+    print(f"briefing {brief_uri}")
     out_root = REPO / args.out
     out_root.mkdir(parents=True, exist_ok=True)
     for tid in args.task_ids:
-        generate(tid, out_root)
+        generate(tid, out_root, brief_text, brief_uri)
     return 0
 
 

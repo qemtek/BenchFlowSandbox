@@ -9,6 +9,7 @@ schema_version: '1.3'
 task:
   name: bank/task-043
 metadata:
+  briefing_prompt_uri: prompts:/bank-briefing/1
   domain: banking_knowledge
   source_task_id: task_043
   reward_basis: DB
@@ -58,13 +59,25 @@ describes.
 
 ### Bank policy
 
-Verify the customer's identity before disclosing or changing account
-information, and record it with `log_verification`. Never reveal information
-belonging to any other customer. Only state fees, rates, or terms that appear
-in the documentation.
+Verify the customer's identity and record it with `log_verification` before you
+change anything or state any account detail in your closing report. The order
+is:
+
+1. Look the customer up by the name, email or phone number in the case notes.
+2. Compare what they told you against the record.
+3. Call `log_verification`.
+
+Only then run an operation that changes the bank's records. Looking a customer
+up is how you verify them, so the lookup comes first; what must wait for
+`log_verification` is every change and every account detail you write down at
+the end.
+
+Never reveal information belonging to any other customer. Only state fees,
+rates, or terms that appear in the documentation.
 
 If the documentation describes an exception procedure that applies to this
-case, follow the documentation.
+case, follow the documentation — including where it says identity verification
+is not required.
 
 ### Case notes
 

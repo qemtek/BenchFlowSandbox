@@ -1,27 +1,40 @@
 #!/usr/bin/env python3
 """Content digests for everything a result depends on.
 
-BenchFlow records a `task_digest` per task, covering the files inside the task
-package. Since we moved shared sources out via `--context-root`, that digest no
-longer covers what the agent actually runs against:
+BenchFlow already digests a task package — `task_digest()`, sha256 over every
+file in the directory — and stamps the result into each rollout's `config.json`
+and `result.json`, verifies it in `benchflow review --tasks-root`, and pins
+dataset releases with it. So `tasks` is not ours to compute: we ask for it
+(`benchflow tasks digest tasks/`) and aggregate the per-task digests into one
+run-level value. One algorithm, so our number, the per-rollout stamp and any
+future `--dataset` pin agree by construction.
 
-    covered      task.md, environment/Dockerfile, oracle/, verifier/, review/
-    NOT covered  vendor/bank_cli.py, vendor/toolsets.py, the knowledge base
+What BenchFlow cannot digest is everything outside a task package. We moved the
+shared sources out via `--context-root`, so:
 
-That gap is real. Today's enum fix flipped two tasks from FAIL to PASS without
-changing a single `task_digest` — two runs with materially different tool
-behaviour looked identical in provenance.
+    covered by task_digest    task.md, environment/Dockerfile, oracle/,
+                              verifier/, review/
+    covered by nothing else   vendor/bank_cli.py, vendor/toolsets.py,
+                              the knowledge base, the prompt templates
 
-This computes the missing digests so a run can be pinned to the exact code and
-data that produced it:
+That gap is real. The enum fix on 2026-09-16 flipped two tasks from FAIL to PASS
+without changing a single `task_digest` — two runs with materially different
+tool behaviour looked identical in provenance. So this module computes the three
+digests nobody else will, and delegates the fourth:
 
+    tasks        tasks/ (delegated: aggregate of BenchFlow per-task digests)
     environment  vendor/ (tool implementation, toolsets, MCP server)
     knowledge    data/banking_knowledge/ (seed db + 698 documents)
     prompts      prompts/ (briefings and frontmatter templates)
 
+Nothing here reports "unknown" quietly. A probe that cannot read what it claims
+to record raises, and the caller decides whether to run anyway — a field whose
+whole purpose is attribution must not degrade into a plausible-looking string.
+
 Usage:
     python tools/provenance.py            # print the digests
     python tools/provenance.py --json     # machine-readable
+    python tools/provenance.py --tasks    # the per-task digest map
 """
 
 from __future__ import annotations
@@ -39,16 +52,26 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 # Bump when TRACKED changes. `combined` is a hash of the other digests, so
 # adding one silently changes it for unchanged content; this makes runs from
 # either side of such a change distinguishable instead of falsely different.
-PROVENANCE_VERSION = 2
+# 3: `tasks` moved from our suffix-filtered digest_dir() to BenchFlow's
+#    task_digest(), which hashes every file rather than a chosen list of
+#    extensions. Same content, different number, so runs either side of the
+#    change must not be compared by digest alone.
+PROVENANCE_VERSION = 3
 
-# Directories whose contents change what a run means, keyed by the name the
-# digest is reported under.
+# Directories outside every task package whose contents change what a run
+# means, keyed by the name the digest is reported under. `tasks` is not here:
+# BenchFlow owns that digest (see task_digests below).
 TRACKED = {
-    "tasks": ("tasks", (".md", ".json", ".py", ".sh", "Dockerfile")),
     "environment": ("vendor", (".py",)),
     "knowledge": ("data/banking_knowledge", (".json",)),
     "prompts": ("prompts", (".md", ".yaml")),
 }
+
+TASKS_DIR = "tasks"
+
+
+class ProvenanceError(RuntimeError):
+    """A provenance fact could not be read. Never swallowed silently."""
 
 
 def digest_dir(root: pathlib.Path, suffixes: tuple[str, ...]) -> tuple[str, int]:
@@ -74,6 +97,67 @@ def digest_dir(root: pathlib.Path, suffixes: tuple[str, ...]) -> tuple[str, int]
         h.update(path.read_bytes())
         count += 1
     return "sha256:" + h.hexdigest(), count
+
+
+def benchflow_python() -> str:
+    """The interpreter BenchFlow is installed under.
+
+    BenchFlow lives in its own environment (uv tool install), so anything that
+    needs to import it runs there rather than forcing it into ours.
+    """
+    bf = shutil.which("benchflow")
+    if not bf:
+        raise ProvenanceError("benchflow is not on PATH")
+    try:
+        shebang = pathlib.Path(bf).read_text().splitlines()[0]
+    except (OSError, IndexError) as e:
+        raise ProvenanceError(f"cannot read the benchflow launcher: {e}") from e
+    return shebang.lstrip("#!").strip()
+
+
+def task_digests(tasks_dir: pathlib.Path | None = None) -> dict[str, str]:
+    """BenchFlow's per-task content digests, as {task_id: digest}.
+
+    `benchflow tasks digest` prints one "<name> <digest>" line per package,
+    computed by the same `task_digest()` that stamps every rollout's
+    config.json and that the dataset registry pins. Asking for it beats
+    recomputing it: a digest that disagrees with the one recorded beside the
+    rollout is worse than no digest, and a per-task map says *which* task moved
+    where a single directory hash only says that something did.
+    """
+    root = tasks_dir or (REPO / TASKS_DIR)
+    proc = subprocess.run(["benchflow", "tasks", "digest", str(root)],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise ProvenanceError(
+            f"benchflow tasks digest failed: {proc.stderr.strip() or proc.stdout.strip()}")
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        # A single task directory prints the bare digest, a collection prints
+        # "<name> <digest>". Accept both so --tasks tasks/task-036 works.
+        if len(parts) == 2 and parts[1].startswith("sha256:"):
+            out[parts[0]] = parts[1]
+        elif len(parts) == 1 and parts[0].startswith("sha256:"):
+            out[root.name] = parts[0]
+    if not out:
+        raise ProvenanceError(
+            f"benchflow tasks digest returned no digests for {root}")
+    return out
+
+
+def aggregate_digest(per_task: dict[str, str]) -> str:
+    """One run-level value over the per-task map, for grouping runs in MLflow.
+
+    Ordered by task id and includes the ids, so adding, removing or renaming a
+    task moves the aggregate just as editing one does.
+    """
+    h = hashlib.sha256()
+    for name in sorted(per_task):
+        h.update(name.encode())
+        h.update(b"\x00")
+        h.update(per_task[name].encode())
+    return "sha256:" + h.hexdigest()
 
 
 def git_state() -> dict:
@@ -138,21 +222,25 @@ def agent_harness(agent: str) -> str:
     rather than guessable. Recording it means a score shift after a BenchFlow
     upgrade can be attributed to the harness instead of the model.
 
-    Returns e.g. "@agentclientprotocol/claude-agent-acp@0.73.0", or "unknown"
-    if the registry cannot be read.
+    Returns e.g. "@agentclientprotocol/claude-agent-acp@0.73.0".
+
+    `benchflow agent show` prints the launch path but not the install pin, so
+    the registry is the only source and this reads it through BenchFlow's own
+    interpreter. That makes it a private-API call: a BenchFlow refactor can
+    break it. It raises when it does, rather than returning "unknown" — a run
+    that silently records "unknown" for its harness looks recorded and is not.
     """
-    # BenchFlow lives in its own interpreter (uv tool install), so import it
-    # there rather than requiring it in ours.
-    try:
-        bf = shutil.which("benchflow")
-        interp = pathlib.Path(bf).read_text().splitlines()[0].lstrip("#!").strip()
-        out = subprocess.run(
-            [interp, "-c", _HARNESS_PROBE, agent],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-        return out or "unknown"
-    except Exception:
-        return "unknown"
+    interp = benchflow_python()
+    proc = subprocess.run([interp, "-c", _HARNESS_PROBE, agent],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise ProvenanceError(
+            f"harness probe failed for {agent!r}: {proc.stderr.strip()}")
+    pin = proc.stdout.strip()
+    if not pin:
+        raise ProvenanceError(
+            f"the agent registry declares no version-pinned install for {agent!r}")
+    return pin
 
 
 # Runs inside BenchFlow's interpreter. Prints the version-pinned packages in the
@@ -168,16 +256,41 @@ print(",".join(pins))
 """
 
 
-def collect(agent: str | None = None) -> dict:
+def collect(agent: str | None = None,
+            tasks_dir: pathlib.Path | None = None) -> dict:
+    """Everything a run needs pinned, plus a `warnings` list.
+
+    A probe that fails records its failure in `warnings` and leaves the field
+    "unknown". Nothing here decides what to do about that; the caller does,
+    loudly (run_experiment tags the run and says so on stderr).
+    """
     out = {"provenance_version": PROVENANCE_VERSION, "git": git_state(),
-           "toolchain": toolchain(), "digests": {}, "file_counts": {}}
+           "toolchain": toolchain(), "digests": {}, "file_counts": {},
+           "warnings": []}
     if agent:
-        out["agent_harness"] = agent_harness(agent)
+        try:
+            out["agent_harness"] = agent_harness(agent)
+        except ProvenanceError as e:
+            out["agent_harness"] = "unknown"
+            out["warnings"].append(f"agent_harness: {e}")
+    # tasks/ is BenchFlow's digest, asked for rather than recomputed.
+    try:
+        per_task = task_digests(tasks_dir)
+        out["task_digests"] = per_task
+        out["digests"]["tasks"] = aggregate_digest(per_task)
+        out["file_counts"]["tasks"] = len(per_task)
+    except ProvenanceError as e:
+        out["task_digests"] = {}
+        out["digests"]["tasks"] = "unknown"
+        out["file_counts"]["tasks"] = 0
+        out["warnings"].append(f"digest_tasks: {e}")
     for name, (rel, suffixes) in TRACKED.items():
         digest, count = digest_dir(REPO / rel, suffixes)
         out["digests"][name] = digest
         out["file_counts"][name] = count
-    # One digest over the three, so a run can be pinned with a single value.
+    if out["toolchain"]["benchflow"] == "unknown":
+        out["warnings"].append("toolchain: benchflow --version is unreadable")
+    # One digest over the four, so a run can be pinned with a single value.
     combined = hashlib.sha256()
     for name in sorted(out["digests"]):
         combined.update(out["digests"][name].encode())
@@ -195,7 +308,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--agent", help="also report this agent's pinned harness")
+    ap.add_argument("--tasks", action="store_true",
+                    help="print BenchFlow's per-task digest map and exit")
     args = ap.parse_args()
+    if args.tasks:
+        print(json.dumps(task_digests(), indent=2))
+        return 0
     data = collect(args.agent)
     if args.json:
         print(json.dumps(data, indent=2))
@@ -206,9 +324,10 @@ def main() -> int:
     if g["dirty"]:
         for f in g["dirty_files"]:
             print(f"           ~ {f}")
-    for name in TRACKED:
+    units = {"tasks": "packages"}
+    for name in ("tasks", *TRACKED):
         print(f"{name:13s}{data['digests'][name][:19]}…  "
-              f"({data['file_counts'][name]} files)")
+              f"({data['file_counts'][name]} {units.get(name, 'files')})")
     print(f"{'combined':13s}{data['digests']['combined'][:19]}…")
     if "vendored_tau2_commit" in data:
         print(f"{'tau2':13s}{data['vendored_tau2_commit'][:12]}")
@@ -216,6 +335,8 @@ def main() -> int:
         print(f"{k:13s}{v[:19] + '…' if v.startswith('sha256:') else v}")
     if "agent_harness" in data:
         print(f"{'harness':13s}{data['agent_harness']}")
+    for w in data["warnings"]:
+        print(f"WARNING      {w}", file=sys.stderr)
     return 0
 
 

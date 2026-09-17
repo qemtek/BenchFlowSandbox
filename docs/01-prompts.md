@@ -6,33 +6,64 @@ the benchmark or part of one experiment.
 
 | Level | Where | Baked into the task? |
 |---|---|---|
-| A. The briefing | `prompts/briefing.md` | yes — regenerate |
-| B. A prompt variant | `BANK_BRIEFING=<file>` at generation time | yes — separate task set |
+| A. The briefing | a new version of `bank-briefing` in the prompt registry | yes — regenerate |
+| B. A prompt variant | `--briefing-version N` at generation time | yes — separate task set |
 | C. A per-run prefix | `--config-override` | no |
+
+The briefing lives in MLflow's prompt registry, not in a file. `make_task.py`
+loads a pinned version and bakes it into every `task.md`, so a task set is
+permanently attached to an immutable prompt version rather than to whatever a
+file happened to hold at the time.
 
 ---
 
 ## A. Change the briefing every task carries
 
-`prompts/briefing.md` is the template. `briefing()` in `tools/make_task.py`
-fills `{scenario}` from the tau2 case and wraps it in
-`prompts/frontmatter.yaml`.
-
-Edit the template, then regenerate and gate:
+Edit `bank-briefing` in the MLflow UI. Saving creates the next version; the
+existing one is immutable, so nothing that already ran is disturbed.
 
 ```bash
-$EDITOR prompts/briefing.md
-python tools/make_task.py $(cat tools/eligible_ids.txt) --out tasks
+mlflow ui --backend-store-uri sqlite:///mlflow.db     # Prompts → bank-briefing
+python tools/register_briefing.py --list              # or check from the shell
+```
+
+Then regenerate against the version you want and gate:
+
+```bash
+python tools/make_task.py $(cat tools/eligible_ids.txt) \
+  --briefing-version 2 --out tasks
 python tools/check_oracles.py          # must still print 48/48
 ```
 
-The gate matters here even though you only touched prose: `task.md` carries the
-MCP server declaration in its frontmatter, and a malformed edit breaks every
-task at once.
+With no `--briefing-version` the newest registered version is used, and the URI
+is printed before generation starts, so a generate is never ambiguous about
+what it baked in.
 
-Regenerating changes `digest_prompts` **and** `digest_tasks`, so runs before and
-after are correctly marked as different. Commit before running anything —
+The gate matters even though you only touched prose: `task.md` carries the MCP
+server declaration in its frontmatter, and a malformed edit breaks every task
+at once.
+
+`make_task.py` substitutes the case notes for `{{scenario}}`, MLflow's
+placeholder convention. A briefing without that placeholder is refused at
+registration, since it would give every task the same empty case.
+
+Regenerating changes `digest_tasks`. Commit before running anything —
 `run_experiment.py` refuses a dirty tree.
+
+### Seeding a fresh tracking store
+
+A new checkout has an empty registry, so there is nothing to generate against.
+`prompts/briefing.seed.md` is the starting text, named the way
+`verifier/db.seed.json` is: read once, not a live copy kept in step with
+anything.
+
+```bash
+python tools/register_briefing.py                        # seeds from the seed file
+python tools/register_briefing.py --from-file draft.md   # or import a variant
+```
+
+Editing the seed file after that does nothing. The authoritative briefing is
+the registered version.
 
 ### Why the framing matters
 
@@ -50,34 +81,65 @@ further questions" — produced 26 tool calls and a pass on the same task, same
 tools, same model. If you flatten a multi-turn benchmark into single-turn, this
 is the failure to watch for.
 
-### A known weakness, not yet fixed
+### A weakness, since fixed
 
-The briefing says to verify identity "before disclosing or changing account
-information" but never says that *reading an account back to the customer*
-counts as disclosure. Seven of ten reviewed rollouts failed that blocker. Some
-of that is probably our wording rather than the model's judgement, and it is the
-obvious first prompt experiment to run.
+The briefing used to say verify identity "before disclosing or changing account
+information" without saying what disclosure meant. Seven of ten reviewed
+rollouts failed that blocker.
+
+That turned out to be mostly the wording and the rubric rather than the model's
+judgement: `log_verification` takes a `user_id`, `address` and `date_of_birth`
+that exist only in the customer record, so verification cannot precede the
+lookup, and the criterion as written could not be satisfied. Both sides were
+corrected — the rubric in
+[docs/iterations/001](iterations/001-identity-blocker-definition.md), the
+briefing in [002](iterations/002-briefing-disclosure-order.md). The briefing now
+gives the order outright.
+
+### Which briefing generated a task set
+
+`make_task.py` stamps `briefing_prompt_uri` into each package's frontmatter, so
+every task names the exact version it was built from:
+
+```yaml
+metadata:
+  briefing_prompt_uri: prompts:/bank-briefing/1
+```
+
+`run_experiment.py` reads it back and logs it as a param. It writes nothing to
+the registry — there is one authoritative copy of the briefing and a run cannot
+change it.
+
+Because a pinned version is immutable, there is no drift to police. The one
+failure worth catching is a half-regenerated task set, where some packages point
+at one version and some at another; that stops the run before any rollout is
+paid for.
 
 ---
 
 ## B. Keep two briefings and generate two task sets
 
-`BANK_BRIEFING` and `BANK_FRONTMATTER` select which template
-`tools/make_task.py` reads, so an alternative prompt becomes its own task set
-rather than an edit you have to remember to undo:
+`--briefing-version` selects which registered version to bake in, so an
+alternative prompt becomes its own task set rather than an edit you have to
+remember to undo:
 
 ```bash
-cp prompts/briefing.md prompts/briefing-strict.md
-$EDITOR prompts/briefing-strict.md
-
-BANK_BRIEFING=briefing-strict.md \
-  python tools/make_task.py $(cat tools/eligible_ids.txt) --out tasks-strict
+# version 1 is the current briefing; make version 2 in the UI, then:
+python tools/make_task.py $(cat tools/eligible_ids.txt) \
+  --briefing-version 1 --out tasks
+python tools/make_task.py $(cat tools/eligible_ids.txt) \
+  --briefing-version 2 --out tasks-v2
 python tools/check_oracles.py
 ```
 
 Both sets stay in the tree, both are digested, and you can run them in either
-order. Use this when the prompt change is large enough that you want to keep
-comparing against it later.
+order. Run `--tasks tasks` against `--tasks tasks-v2` and the two arms log
+different `briefing_prompt_uri` values, so the comparison is attributable to the
+prompt.
+
+This is what makes a prompt change measurable from one commit. Without it,
+isolating a briefing change means rollouts at the commit before and the commit
+after, which costs an extra run and a checkout.
 
 ---
 
@@ -141,19 +203,27 @@ It tells you nothing about whether the change helps.
 Run both arms over the whole set into separate job directories, then pair them:
 
 ```bash
-benchflow eval compare-lift \
-  --baseline jobs/<baseline-run> --trained jobs/<treatment-run> \
-  --out lift.md --json-out lift.json
+python tools/compare_arms.py \
+  --baseline <baseline-mlflow-run-id> --treatment <treatment-mlflow-run-id> \
+  --note "what changed in the prompt"
 ```
 
-`compare-lift` matches rollouts by task and reports pass-rate and mean-reward
-deltas with bootstrap confidence intervals. Pairing is what makes a 48-task set
-usable: it cancels task difficulty, which is most of the variance. Comparing two
-aggregate pass rates instead needs a much larger set to say anything.
+That wraps `benchflow eval compare-lift`, which matches rollouts by task and
+reports pass-rate and mean-reward deltas with bootstrap confidence intervals.
+Pairing is what makes a 48-task set usable: it cancels task difficulty, which is
+most of the variance. Comparing two aggregate pass rates instead needs a much
+larger set to say anything.
 
-Read the coverage table before the delta. Only tasks with a healthy scored
-rollout on **both** sides enter the paired metrics, so a crash in one arm
-silently drops that task.
+A prompt experiment is exactly the case the wrapper's digest guard is built for:
+regenerating moves `digest_prompts` and `digest_tasks` together, and it is
+`digest_knowledge` holding still that says the two arms answered the same
+questions. It refuses when the measuring stick moved, and names the prompt
+digest as the lever that did.
+
+Read the coverage before the delta. Only tasks with a healthy scored rollout on
+**both** sides enter the paired metrics, so a crash in one arm silently drops
+that task — `health_coverage` on each run and the paired counts on the
+comparison are where that shows up.
 
 If the interval includes zero, the experiment could not tell whether the change
 helped. That is different from showing it did not help.

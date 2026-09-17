@@ -61,12 +61,15 @@ worse than no number, because it looks trustworthy.
 
 ## Anatomy of a task
 
-Each of the 48 packages under `tasks/` holds eight files:
+Each of the 48 packages under `tasks/` holds the same ten files:
 
 ```
 tasks/task-036/
 ├── task.md                     the briefing + BenchFlow config (MCP server declared here)
-├── environment/Dockerfile      pinned base image digest, exact pip pins
+├── environment/
+│   ├── Dockerfile              pinned base image digest, exact pip pins
+│   └── skills/bank-case-handling/SKILL.md
+│                               deployed only under --skill-mode with-skill
 ├── oracle/
 │   ├── actions.json            the reference solution, as tool calls
 │   └── solve.sh                replays it through the MCP surface
@@ -78,9 +81,10 @@ tasks/task-036/
 └── review/rubric.json          the compliance rubric for the LLM judge
 ```
 
-Nothing here is hand-written. `tools/make_task.py` generates all 48 from
-`prompts/briefing.md`, `prompts/frontmatter.yaml` and the τ² case files in
-`data/banking_knowledge/tasks/`. Edit the templates, regenerate, gate.
+Nothing here is hand-written. `tools/make_task.py` generates all 48 from the
+`bank-briefing` prompt in MLflow's registry, `prompts/frontmatter.yaml` and the
+τ² case files in `data/banking_knowledge/tasks/`. Change the source, regenerate,
+gate.
 
 ---
 
@@ -143,17 +147,46 @@ deterministic verifier cannot see that; only the review can.
 
 ---
 
-## The four levers
+## The five levers, and how to change one in isolation
 
-| Lever | Where | Needs a rebuild? | Guide |
-|---|---|---|---|
-| Prompts | `prompts/briefing.md`, or `--config-override` | regenerate | [01-prompts](docs/01-prompts.md) |
-| Tools | `vendor/toolsets.py`, `vendor/bank_mcp.py` | yes, for `bank_mcp.py` | [02-tools](docs/02-tools.md) |
-| Skills | `tasks/*/environment/skills/`, `--skill-mode` | no | [03-skills](docs/03-skills.md) |
-| Model / harness | `--agent`, `--model`, `--reasoning-effort` | no | below |
+| Lever | Switch | Both arms from one commit? | Rebuild? | Guide |
+|---|---|---|---|---|
+| Prompt | `--briefing-version N`, or `--config-override` | yes | yes | [01-prompts](docs/01-prompts.md) |
+| Tools — which are exposed | `BANK_TOOLSET` via `--config-override` | yes | no | [02-tools](docs/02-tools.md) |
+| Tools — what one does | edit `vendor/` | no | yes | [02-tools](docs/02-tools.md) |
+| Skills | `--skill-mode` | yes | no | [03-skills](docs/03-skills.md) |
+| Model / harness | `--agent`, `--model`, `--reasoning-effort` | yes | no | below |
+| Environment | `DOCKERFILE` in `make_task.py`, the knowledge base | no | yes | below |
 
-The cheapest real experiment is the toolset switch, because the variable is
-declared in one file and travels in the run config:
+"Both arms from one commit" is the column that decides what an experiment
+costs. A lever behind a flag is two runs from one working tree. A lever baked
+into a file needs a second task set, or a checkout — and a checkout means the
+arms differ by everything else that changed between those commits too.
+
+Always give each arm its own `--jobs-dir`. BenchFlow resumes into an existing
+one and skips rollouts it considers done, which silently compares an arm
+against itself.
+
+### The prompt
+
+- **Switch.** Edit `bank-briefing` in the MLflow UI; saving creates the next
+  version. Generate a second task set against it:
+  `make_task.py … --briefing-version 2 --out tasks-v2`.
+- **Arms.** `--tasks tasks` against `--tasks tasks-v2`. Both directories exist
+  at once, so no checkout.
+- **Recorded as** `briefing_prompt_uri`, `digest_tasks`.
+- **Gate.** `check_oracles.py` must print 48/48 — `task.md` carries the MCP
+  server declaration, so a malformed edit breaks every task at once.
+- **Cheaper variant.** `--config-override '{"agent":{"prompt_prefix":"…"}}'`
+  for a per-run nudge, no regeneration. Generic constraints only; task-specific
+  solution content makes any lift meaningless.
+
+### The tools
+
+Two levers that get mistaken for each other.
+
+**Which tools are exposed** — the cheapest real experiment here, because the
+variable is declared in one file and travels in the run config:
 
 ```bash
 python tools/run_experiment.py --tasks tasks \
@@ -161,10 +194,85 @@ python tools/run_experiment.py --tasks tasks \
   --note "can it work without the discovery mechanism"
 ```
 
-`default` exposes 14 of 14 tools, `no_discovery` 10, `read_only` 7. The filter
-wraps `get_tools()` and `has_tool()`, so a withheld tool vanishes from
-`tools/list` as well as from dispatch — the agent cannot see it, not merely fail
-to call it.
+- **Arms.** One commit, no rebuild, no regeneration. `default` exposes 14 of
+  14 tools, `no_discovery` 10, `read_only` 7.
+- **Recorded as** `config_override`.
+- **Why it is honest.** The filter wraps `get_tools()` and `has_tool()`, so a
+  withheld tool vanishes from `tools/list` as well as from dispatch — the agent
+  cannot see it, not merely fail to call it.
+
+**What a tool does** — editing `vendor/tau2/…/tools.py` or `vendor/bank_mcp.py`:
+
+- **Arms.** No flag exists, so two commits, one run each.
+- **Rebuild.** Required. `vendor/` is copied in at build time, so an edit does
+  nothing until the image rebuilds.
+- **Recorded as** `digest_environment`.
+- **Gate.** This is where `check_oracles.py` earns its keep: 48 replays through
+  the real dispatch path plus a stdio smoke test, no LLM, about two minutes.
+
+### The skills
+
+- **Switch.** `--skill-mode no-skill` against `--skill-mode with-skill`.
+- **Arms.** One commit, no rebuild, no regeneration. The cleanest lever here.
+- **Recorded as** `skill_mode`, plus `total_skill_invocations` as a metric.
+- **Why the baseline is trustworthy.** Under `no-skill` BenchFlow deletes the
+  bundled skills directory from the staged copy and strips its `COPY` lines, so
+  a `COPY .` cannot leak it. Honest by construction rather than by trust.
+- **Gate.** None. `check_oracles.py` never runs an agent, so this is the one
+  lever with no cheap deterministic check. Budget for the rollouts.
+- **Trap.** Read `total_skill_invocations` before anything else. At zero the
+  skill never deployed, and "it did not help" and "it was never read" are the
+  same number.
+
+### The model and harness
+
+- **Switch.** `--agent`, `--model`, `--reasoning-effort`.
+- **Arms.** One commit, no rebuild, no regeneration.
+- **Recorded as** `agent`, `agent_harness`, `model`, `model_is_alias`,
+  `reasoning_effort`.
+- **Trap.** Pass a dated model id. `claude-sonnet-4-5` is an alias, so a run
+  recorded under it does not say which weights answered. The runner records
+  `model_is_alias` either way, so a run is never silently ambiguous — but the
+  number is still unattributable.
+- **Related.** `--trials N` reruns one arm through BenchFlow's `--matrix`, one
+  nested run per trial, and puts the spread on the parent. That spread is the
+  noise floor, and it is still unmeasured here.
+
+### The environment
+
+Three sub-levers, all more expensive than they look.
+
+**The container** — base image, `ripgrep`, `jq`, the pinned pip versions. Edit
+the `DOCKERFILE` constant in `make_task.py`, then regenerate. Two commits,
+rebuild required, recorded in `digest_tasks` because the Dockerfile lives
+inside the package. The base image is pinned by digest rather than tag:
+`python:3.12-slim` is mutable and would otherwise change under you.
+
+**How the agent searches the knowledge base** — τ² ships this as a ladder:
+plain (no search), grep, shell (current — `ripgrep` is installed), and
+KB-search (dense retrieval). Dropping a rung is one line of the Dockerfile.
+Dense retrieval needs the retrieval chain vendored;
+`vendor/tau2/domains/banking_knowledge/__init__.py` stubs it out.
+
+**The knowledge base itself** — the 698 documents, recorded as
+`digest_knowledge`. Handle with care: the documents name the discoverable
+operations (`Use open_bank_account_4821`), so careless edits change the answer
+key rather than the environment.
+
+### Before you believe a comparison
+
+```bash
+python tools/compare_arms.py --baseline <run-id> --treatment <run-id> \
+  --note "what moved"
+```
+
+It refuses a comparison whose arms did not ask the same questions. `compare-lift`
+pairs rollouts by task id and will pair two tasks that share an id and nothing
+else, so `compare_arms.py` runs `benchflow tasks overlap` over both runs' task
+manifests first: a changed roster is refused, and so is a *subset* of task
+packages differing, which no whole-set lever produces and which a stray
+regeneration does. A prompt arm changes every task digest on purpose, and that
+case is allowed because `briefing_prompt_uri` accounts for it.
 
 ---
 
@@ -189,17 +297,35 @@ benchflow review jobs/scratch --rubric tasks/task-036/review/rubric.json
 renders the agent's trajectory as a page, which beats reading `results.jsonl`.
 
 **What `tools/run_experiment.py` adds.** BenchFlow has no tracking layer — no
-experiment store, no tags or notes, and it does not emit a task digest in
-anything it writes. So the wrapper exists to record a run, not to replace one.
-It calls `benchflow eval run` with the arguments above, and around that call it:
+experiment store, no tags, no notes, and nothing that remembers one run in terms
+of another. So the wrapper exists to record a run, not to replace one. It calls
+`benchflow eval run` with the arguments above, and around that call it:
 
-- refuses to start on a dirty working tree
-- computes the four content digests, the agent harness pin and the host lock,
-  and logs them as MLflow params
-- logs pass rate, efficiency, cost and token metrics
+- refuses to start on a dirty working tree, or into a job directory that already
+  holds results (BenchFlow would resume into it and skip rollouts it considers
+  done, silently comparing an arm against itself)
+- collects the content digests, the agent harness pin and the host lock, and
+  logs them as MLflow params — asking BenchFlow for the task digests rather than
+  recomputing them
+- asks for the run's own coverage (`--health-summary-out`), resolved config
+  (`--run-config-out`) and task manifest (`--task-manifest-out`), logs the
+  counts as metrics, and asserts the task count with `--expected-tasks`
+- logs pass rate, efficiency, cost and token metrics, each with the flag that
+  says whether it is trustworthy
 - optionally runs `benchflow review` and folds the judge's per-criterion results
   into the same run
 - archives the whole job directory into that run
+
+Everything the wrapper reads is a file it asked BenchFlow to write, at a path it
+chose. That is a deliberate rule: the alternative — reading whatever the run
+left in the directory and taking the newest — is a guess that holds until two
+runs overlap.
+
+**Repeats.** `--trials N` runs the same arm N times through BenchFlow's
+`--matrix`, which gives every trial its own job directory. Each trial becomes a
+nested MLflow run; the parent carries `pass_rate_mean`, `pass_rate_sd` and
+`pass_rate_spread` across them. That spread is the noise floor, and a delta
+between two arms smaller than it is not evidence of anything.
 
 Use `benchflow eval run` when the answer is disposable. Use the wrapper when you
 intend to cite the number later.
@@ -234,11 +360,18 @@ and records `model_is_alias` either way, so a run is never silently ambiguous.
 ```
 git_commit, git_branch, provenance_version
 digest_tasks, digest_environment, digest_knowledge, digest_prompts, digest_combined
+briefing_prompt_uri, briefing_prompt_version
 vendored_tau2_commit, benchflow_version, docker_version
 agent, agent_harness, model, reasoning_effort, sampling_params
-skill_mode, tasks, include, concurrency, config_override
+skill_mode, tasks, include, expected_tasks, concurrency, trials, config_override
+jobs_dir                            the back-pointer: which directory produced it
 reviewer_model, reviewer_harness, rubric_digest, rubric_criteria, reviewer_network
 ```
+
+**Tags:** `dirty`, `note`, `provenance_complete` (false when a probe could not
+read what it claims to record), `coverage_complete` (false when a rollout did
+not score), `cost_priced` (false under subscription auth, where there is no
+price source and `total_cost_usd` is 0.0 meaning *unpriced*, not *free*).
 
 **Metrics:**
 
@@ -253,6 +386,18 @@ review_mean_raw_quality             weighted_points / max_weighted_points
 review_mean_gated_quality           raw_quality, zeroed unless BOTH the
                                     deterministic verifier and every blocker passed
 review_publishable_rate
+
+health_total_rollouts, health_scored_rollouts, health_unscored_rollouts
+health_zero_tool_rollouts           rollouts that made no tool call at all
+health_missing_llm_trajectory, health_malformed_llm_trajectory
+health_coverage                     scored / total — read this before the delta
+telemetry_coverage                  whether the token counts can be believed
+total_skill_invocations             separates "the skill did not help" from
+                                    "the agent never opened it"
+verifier_errored
+
+trials_completed, pass_rate_mean, pass_rate_sd    with --trials N
+pass_rate_min, pass_rate_max, pass_rate_spread
 ```
 
 **Artifacts:** `summary.json`, `results.jsonl` (full trajectories and the tool
@@ -273,10 +418,27 @@ prompts but different tools?*
 
 A colleague committing to `docs/` moves `git_commit` and leaves all four digests
 untouched, so runs still group correctly. Edit one word of
-`prompts/briefing.md` and `digest_prompts` moves while the others hold.
+`prompts/frontmatter.yaml` and `digest_prompts` moves while the others hold.
+
+The briefing is not covered by `digest_prompts`, because it is not a file — it
+is a pinned version in MLflow's prompt registry, recorded per run as
+`briefing_prompt_uri`. That is a stronger identifier than a directory hash: two
+briefing variants in the tree would collide in one digest, whereas two versions
+never collide.
 
 Four are tracked: `tasks`, `environment` (`vendor/`), `knowledge`
 (`data/banking_knowledge/`), `prompts`. `combined` hashes the four.
+
+`tasks` is not ours to compute. BenchFlow digests a task package with
+`task_digest()` — sha256 over every file in it — stamps the result into each
+rollout's `config.json` and `result.json`, pins dataset releases with it, and
+`benchflow review --tasks-root` recomputes it to decide whether a task may be
+admitted as evidence. So `provenance.py` asks for it (`benchflow tasks digest
+tasks/`, one digest per package, logged as an artifact) and aggregates the map
+into `digest_tasks`. One algorithm, so our number, the per-rollout stamp and any
+future `--dataset` pin agree by construction. The other three cover what no task
+digest can reach: everything we moved out of the task packages via
+`--context-root`.
 `provenance_version` exists because adding a digest changes `combined` for
 unchanged content — runs either side of a schema change are distinguishable
 rather than falsely different.
@@ -304,7 +466,7 @@ Pair them instead. BenchFlow does this natively:
 ```bash
 benchflow eval compare-lift \
   --baseline jobs/<baseline-run> --trained jobs/<treatment-run> \
-  --out lift.md --json-out lift.json
+  --out lift.md --json-out lift.json --bootstrap-seed 0
 ```
 
 `compare-lift` matches rollouts task by task and reports pass-rate and
@@ -314,11 +476,35 @@ you can detect. The mechanism — only the tasks the two arms *disagree* on carr
 information — is in
 [docs/learnings/02-paired-comparison.md](docs/learnings/02-paired-comparison.md).
 
-Three things to check before believing a result:
+**For a comparison you intend to cite, use the wrapper:**
+
+```bash
+python tools/compare_arms.py \
+  --baseline <mlflow-run-id> --treatment <mlflow-run-id> \
+  --note "no_discovery toolset"
+```
+
+It resolves each arm's job directory — from `jobs/` if it is still there, from
+the run's archive if it is not, so a comparison survives deleting scratch — runs
+`compare-lift` with a pinned bootstrap seed, and records the result as a third
+MLflow run: both arms' ids and digests as params, the deltas and their intervals
+as metrics, `lift.md` and `lift.json` as artifacts.
+
+It also **refuses to compare arms whose `digest_tasks` or `digest_knowledge`
+differ**. Those two are the measuring stick; if they moved, pairing by task id
+compares two different questions. Digests that are meant to move — environment,
+prompts — are reported as the lever under test rather than blocked. This is what
+the split digests were for, and nothing read them until the comparison did.
+
+Three things to check before believing a result. All three are now data on the
+run rather than instructions to a reader — `health_coverage` and the
+`coverage_complete` tag on each arm, the paired counts on the comparison:
 
 - **The coverage table, before the delta.** Only tasks with a healthy scored
   rollout on *both* sides enter the paired metrics, so a crash in one arm
-  silently drops that task.
+  silently drops that task. `compare_arms.py` prints how many tasks each arm
+  contributed alone and tags the comparison `coverage_complete=false` when
+  either number is not zero.
 - **Whether zero falls inside the interval.** If it does, "no difference" is
   still a plausible answer, but so is a large improvement. The experiment could
   not tell which, and that is different from showing the change did not help.
@@ -328,7 +514,9 @@ Three things to check before believing a result:
 
 Always use a separate job directory per arm. BenchFlow resumes into an existing
 one and skips rollouts it considers done, which silently produces a comparison
-of an arm against itself.
+of an arm against itself. `run_experiment.py` refuses to start in a job
+directory that is not empty, and `--trials` gets its per-trial directories from
+BenchFlow's `--matrix`, so neither path can make that mistake by hand.
 
 ---
 
@@ -362,11 +550,50 @@ Pre-push rather than pre-commit, because it takes about two minutes.
 
 ---
 
+## Changing the evaluation setup
+
+The five levers above are things you change to test an agent. The rubric, the
+briefing, a verifier and the metrics change too, and those changes move the
+numbers just as much.
+
+Every one of them gets a page in [docs/iterations/](docs/iterations/), written
+**before** the change is made:
+
+```
+## The problem      what is wrong, with the evidence
+## The change       what will be different, exact enough to implement from
+## Baseline         the numbers before, and the run they came from
+## Prediction       what should happen, stated so that it can fail
+## How it is measured   the commands, and what the control arm is
+## Result           the numbers after, and the run they came from
+## Verdict          landed, reverted, or inconclusive
+```
+
+Four rules carry most of the value:
+
+- **One variable per page.** A rubric fix and a briefing fix aimed at the same
+  failure are two pages, or neither result is attributable.
+- **Predict specifically enough to be wrong.** "Should improve the blocker pass
+  rate" cannot fail; "six of the seven failures flip, and task-005 does not"
+  can.
+- **Re-grade rather than re-run where it applies.** A rubric or reviewer change
+  can be measured against archived rollouts with `benchflow review`, at no cost
+  in agent rollouts. A briefing, tool or skill change cannot.
+- **Measure a control when the instrument is stochastic.** The reviewer is an
+  LLM and disagrees with itself, so a new rubric is compared against the old
+  rubric re-run on the same rollouts, not against the old report.
+
+`docs/iterations/README.md` holds the full convention and the template.
+
+---
+
 ## Repository map
 
 ```
 tasks/                  48 generated task packages
-prompts/                briefing.md, frontmatter.yaml — edit these, then regenerate
+prompts/
+  briefing.seed.md      starting text for an empty registry; read once, not live
+  frontmatter.yaml      task config for every task — edit this, then regenerate
 vendor/
   tau2/                 the vendored τ² banking domain (pinned, see SOURCE.txt)
   bank_mcp.py           the MCP server — the agent's only interface
@@ -375,12 +602,17 @@ vendor/
   mcp_replay.py         replays reference actions through the MCP surface
 tools/
   make_task.py          generates the 48 packages
+  register_briefing.py  seeds or imports a briefing into the prompt registry
+  compare_arms.py       records a paired comparison, and guards what it compares
   check_oracles.py      the gate
   run_experiment.py     tracked runs
+  compare_arms.py       tracked comparisons between two runs
   provenance.py         digests, git state, harness and host pins
   document_tools.py     regenerates docs/tools.md
 data/banking_knowledge/ seed database, 698 documents, 97 τ² case files
 docs/                   the guides
+  learnings/            how to tell a result from a coincidence
+  iterations/           one page per change to scoring or task text
 deprecated/             multi-turn scaffolding and why it does not work here
 ```
 
@@ -392,8 +624,11 @@ Three, stated plainly because a rig that hides its limits is worse than one
 without them.
 
 **Run-to-run variance is unmeasured.** Nothing here tells you the noise floor
-empirically. Until the same commit runs several times, no comparison is fully
-defensible. This is the next thing worth doing.
+empirically yet. The mechanism now exists — `run_experiment.py --trials N` runs
+one arm N times and records `pass_rate_sd` and `pass_rate_spread` across the
+trials — but until it is actually run on a frozen task subset, no comparison is
+fully defensible and no scored gate can set a threshold that means anything.
+This is the next thing worth doing.
 
 **The judge has never been checked against human labels.** Recording it
 carefully means the number is reproducible, not that it is right. Treat rubric
@@ -410,6 +645,8 @@ in production. See [versioning-gaps](docs/versioning-gaps.md).
 
 - **[docs/learnings/](docs/learnings/)** — how to tell a result from a
   coincidence: standard error, paired comparison, bootstrapping
+- **[docs/iterations/](docs/iterations/)** — the log of changes to scoring and
+  task text, each with its baseline and its result
 - **[docs/01-prompts.md](docs/01-prompts.md)** — three levels of prompt change
 - **[docs/02-tools.md](docs/02-tools.md)** — the MCP surface and toolsets
 - **[docs/03-skills.md](docs/03-skills.md)** — authoring and testing a skill

@@ -16,6 +16,17 @@ worse than no number, because it looks trustworthy.
 
     --allow-dirty   record the dirty file list and run anyway (debugging only;
                     the run is tagged dirty=true and should not be cited)
+    --trials N      run the same arm N times through BenchFlow's --matrix, one
+                    nested MLflow run per trial plus the spread on the parent.
+                    The spread is the noise floor: a delta between two arms
+                    smaller than it is not evidence.
+
+The boundary with BenchFlow is deliberate and one-directional. BenchFlow owns
+the data plane — tasks, rollouts, rewards, digests — and knows nothing about
+MLflow. This owns the experimentation plane, and reads only files it asked
+BenchFlow to write at paths it chose (`--health-summary-out`, `--run-config-out`,
+`--task-manifest-out`, `benchflow review --out-dir`). It recomputes nothing the
+data plane already emits.
 """
 
 from __future__ import annotations
@@ -25,6 +36,7 @@ import hashlib
 import json
 import pathlib
 import re
+import statistics
 import subprocess
 import sys
 import tarfile
@@ -33,7 +45,7 @@ import time
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
-from provenance import agent_harness, collect  # noqa: E402
+from provenance import ProvenanceError, agent_harness, collect  # noqa: E402
 
 # MLflow 3.x put the filesystem store into maintenance mode; SQLite is the
 # supported local backend and is queryable, which suits comparing arms.
@@ -41,20 +53,35 @@ TRACKING_DB = REPO / "mlflow.db"
 ARTIFACTS = REPO / "mlartifacts"
 
 
-def gold_action_count(tasks_path: pathlib.Path) -> int:
+def task_dirs(tasks_path: pathlib.Path) -> list[pathlib.Path]:
+    """The task packages `--tasks` selects: itself, or its children."""
+    if (tasks_path / "task.md").is_file():
+        return [tasks_path]
+    return sorted(d for d in tasks_path.iterdir()
+                  if (d / "task.md").is_file())
+
+
+def gold_action_count(tasks_path: pathlib.Path,
+                      include: list[str]) -> int:
     """Total reference actions across the selected tasks — the denominator for
-    efficiency (see docs/production-realism.md §1)."""
-    golds = (
-        [tasks_path / "verifier" / "gold.json"]
-        if (tasks_path / "verifier" / "gold.json").is_file()
-        else sorted(tasks_path.glob("*/verifier/gold.json"))
-    )
+    efficiency (see docs/production-realism.md §1).
+
+    Raises on a gold file it cannot read. An earlier version swallowed the
+    error, which silently changed the denominator of a headline metric: a
+    malformed gold.json made the agent look more efficient, not broken.
+    """
+    dirs = task_dirs(tasks_path)
+    if include:
+        dirs = [d for d in dirs if d.name in set(include)]
     total = 0
-    for g in golds:
+    for d in dirs:
+        g = d / "verifier" / "gold.json"
+        if not g.is_file():
+            raise SystemExit(f"missing gold actions: {g}")
         try:
             total += len(json.loads(g.read_text()))
-        except Exception:
-            pass
+        except (OSError, ValueError) as e:
+            raise SystemExit(f"unreadable gold actions in {g}: {e}") from e
     return total
 
 
@@ -71,11 +98,16 @@ def review_metrics(report: dict) -> tuple[dict, dict]:
     rubric = report.get("rubric", {}) or {}
     trials = [t for t in report.get("trials", []) if t.get("review_valid")]
 
+    try:
+        reviewer_harness = agent_harness(reviewer.get("agent", ""))
+    except ProvenanceError as e:
+        reviewer_harness = "unknown"
+        print(f"  warning: reviewer harness unrecorded — {e}", file=sys.stderr)
     params = {
         "reviewer_agent": reviewer.get("agent", "unknown"),
         "reviewer_model": reviewer.get("model", "unknown"),
         "reviewer_network": reviewer.get("network", "unknown"),
-        "reviewer_harness": agent_harness(reviewer.get("agent", "")),
+        "reviewer_harness": reviewer_harness,
         "rubric_criteria": ",".join(rubric.get("criteria", [])),
     }
     rubric_path = rubric.get("path")
@@ -139,15 +171,420 @@ def review_metrics(report: dict) -> tuple[dict, dict]:
     return params, metrics
 
 
-def summarise(jobs_dir: pathlib.Path) -> dict:
-    """Read BenchFlow's own summary for the most recent job."""
-    runs = sorted(
-        (p for p in jobs_dir.glob("*/summary.json")),
-        key=lambda p: p.stat().st_mtime,
-    )
+def rel_to_repo(path: pathlib.Path) -> str:
+    """Repo-relative where possible, absolute otherwise — never an exception."""
+    try:
+        return str(path.relative_to(REPO))
+    except ValueError:
+        return str(path)
+
+
+def read_json(path: pathlib.Path) -> dict:
+    """A file we asked BenchFlow to write, or {} with the absence visible."""
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except ValueError as e:
+        print(f"  warning: {path.name} is not valid JSON ({e})", file=sys.stderr)
+        return {}
+
+
+def summarise(job_dir: pathlib.Path) -> dict:
+    """BenchFlow's own summary for the single evaluation under `job_dir`.
+
+    The run writes one timestamped directory into a jobs dir we created empty
+    and own, so there is exactly one. An earlier version took whichever
+    `*/summary.json` had the newest mtime, which is a guess: it is right until
+    two runs overlap, and then it is wrong without saying so.
+    """
+    runs = sorted(job_dir.glob("*/summary.json"))
     if not runs:
         return {}
-    return json.loads(runs[-1].read_text())
+    if len(runs) > 1:
+        raise SystemExit(
+            f"{job_dir} holds {len(runs)} evaluations; this wrapper owns one "
+            f"job directory per run, so something else wrote here")
+    return json.loads(runs[0].read_text())
+
+
+def health_metrics(job_dir: pathlib.Path) -> tuple[dict, bool]:
+    """Coverage counts from the health summary we asked BenchFlow to write.
+
+    The README tells a reader to check coverage before believing a delta. This
+    makes that check data on the run instead of an instruction to a human: how
+    many rollouts scored, how many produced no tool calls, how many lost their
+    LLM trajectory. A pass rate averaged over an arm that quietly lost six
+    rollouts has the same problem as a number from a dirty tree — it looks
+    trustworthy.
+    """
+    health = read_json(job_dir / "health.json")
+    if not health:
+        return {}, False
+    total = health.get("total_rows", 0) or 0
+    scored = health.get("scored_rows", 0) or 0
+    metrics = {
+        "health_total_rollouts": total,
+        "health_scored_rollouts": scored,
+        "health_unscored_rollouts": health.get("unscored_rows", 0) or 0,
+        "health_zero_tool_rollouts": health.get("zero_tool_rows", 0) or 0,
+        "health_missing_llm_trajectory":
+            health.get("missing_llm_trajectory", 0) or 0,
+        "health_malformed_llm_trajectory":
+            health.get("malformed_llm_trajectory", 0) or 0,
+        "health_coverage": (scored / total) if total else 0.0,
+    }
+    return metrics, bool(total) and scored == total
+
+
+def start_capture(jobs_dir: pathlib.Path, port: int) -> tuple:
+    """Run the capture proxy for this run, and the agent env that reaches it.
+
+    BenchFlow skips its own LiteLLM proxy under subscription auth, so
+    `llm_trajectory.jsonl` is never written and with it goes per-call usage,
+    the dated snapshot that answered, and the exact context each turn saw.
+    `tools/capture_proxy.py` fills that gap for a subscription run.
+
+    The sandbox is handed a per-run secret rather than the real credential:
+    the proxy checks it, strips it, and attaches the subscription token on the
+    way upstream. That is the property BenchFlow's own proxy has — the raw
+    credential never reaches the agent — and it is an improvement on the
+    default path, where the token is injected into a container that has open
+    network access.
+    """
+    secret = secrets.token_urlsafe(24)
+    capture = jobs_dir / "capture.jsonl"
+    proc = subprocess.Popen(
+        [sys.executable, str(REPO / "tools" / "capture_proxy.py"),
+         "--out", str(capture), "--port", str(port), "--secret", secret,
+         "--inject"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    time.sleep(1.0)
+    if proc.poll() is not None:
+        raise SystemExit(f"capture proxy failed to start:\n{proc.communicate()[0]}")
+    # host.docker.internal is how a container reaches the host under Docker
+    # Desktop; loopback inside the sandbox is the sandbox itself.
+    env_args = [
+        "--agent-env", f"ANTHROPIC_BASE_URL=http://host.docker.internal:{port}",
+        "--agent-env", f"ANTHROPIC_AUTH_TOKEN={secret}",
+    ]
+    print(f"capturing provider traffic on :{port} → {capture.name}")
+    return proc, capture, env_args
+
+
+def finish_capture(proc, capture: pathlib.Path, jobs_dir: pathlib.Path) -> None:
+    """Stop the proxy, split its capture per rollout, and refresh health.json."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    if not capture.is_file():
+        print("  capture proxy recorded nothing — did the sandbox reach the "
+              "host? (host.docker.internal)", file=sys.stderr)
+        return
+    subprocess.run(
+        [sys.executable, str(REPO / "tools" / "capture_proxy.py"),
+         "--out", str(capture), "--attribute", str(jobs_dir)], check=False)
+    # health.json was written before the trajectories existed, so its
+    # missing_llm_trajectory count is stale by construction. Recompute it with
+    # BenchFlow's own writer rather than patching the numbers ourselves.
+    for health_file in sorted(jobs_dir.rglob("health.json")):
+        recorded = read_json(health_file).get("job_dir")
+        if not recorded:
+            continue
+        subprocess.run(
+            [provenance_python(), "-c",
+             "import sys;from pathlib import Path;"
+             "from benchflow.eval_artifacts import write_health_summary;"
+             "write_health_summary(Path(sys.argv[1]), Path(sys.argv[2]))",
+             str(health_file), recorded],
+            check=False, capture_output=True)
+
+
+def selected_tasks(tasks_path: pathlib.Path, include: list[str]) -> list[str]:
+    """The task ids this run will evaluate, so the count can be asserted.
+
+    `--expected-tasks` turns a silent partial selection into a failed run: a
+    47-task arm compared against a 48-task arm is not a comparison, and nothing
+    in the output says which tasks were missing.
+    """
+    names = [d.name for d in task_dirs(tasks_path)]
+    if not names:
+        raise SystemExit(f"no task packages under {tasks_path}")
+    if include:
+        unknown = sorted(set(include) - set(names))
+        if unknown:
+            raise SystemExit(f"--include names no such task: {', '.join(unknown)}")
+        names = [n for n in names if n in set(include)]
+    return names
+
+
+def build_cmd(args, tasks_path: pathlib.Path, jobs_dir: pathlib.Path,
+              expected: int) -> list[str]:
+    """The `benchflow eval run` invocation, including the artifacts we want.
+
+    Every file this wrapper later reads is one it asked BenchFlow to write, at
+    a path it chose. The alternative — reading whatever the run left in the
+    directory and taking the newest — is a guess that holds until two runs
+    overlap.
+    """
+    cmd = [
+        "benchflow", "eval", "run",
+        "--tasks-dir", str(tasks_path),
+        "--context-root", str(REPO),
+        "--agent", args.agent,
+        "--model", args.model,
+        "--sandbox", "docker",
+        "--concurrency", str(args.concurrency),
+        "--skill-mode", args.skill_mode,
+        "--jobs-dir", str(jobs_dir),
+        # Named outputs rather than salvage. In matrix mode BenchFlow splits
+        # each of these per cell (<alias>/trial-NN/<name>), which is why the
+        # cell readers below look for the same filenames one level down.
+        "--health-summary-out", str(jobs_dir / "health.json"),
+        "--run-config-out", str(jobs_dir / "run-config.json"),
+        "--task-manifest-out", str(jobs_dir / "task-manifest.json"),
+        "--expected-tasks", str(expected),
+    ]
+    for inc in args.include:
+        cmd += ["--include", inc]
+    if args.config_override:
+        cmd += ["--config-override", args.config_override]
+    if args.reasoning_effort:
+        cmd += ["--reasoning-effort", args.reasoning_effort]
+    if args.trials > 1:
+        # Repeats are BenchFlow's job, not a loop around this script: --matrix
+        # gives each trial its own job directory, so no trial can resume into
+        # another's and be silently compared against itself.
+        cmd += ["--matrix", str(jobs_dir / "matrix.yaml"),
+                "--trials", str(args.trials)]
+    return cmd
+
+
+def write_matrix(path: pathlib.Path, alias: str, model: str) -> None:
+    path.write_text(f"models:\n  {alias}:\n    model: {model}\n")
+
+
+def run_review(args, cell_dir: pathlib.Path, tasks_path: pathlib.Path) -> dict:
+    """Grade `cell_dir`'s rollouts and return the report, or {}.
+
+    `--out-dir` is the point. Without it BenchFlow writes `jobs/review-<ts>/`
+    and the caller has to guess which one was its own; the previous version
+    globbed every `jobs/review-*` in the repo and took the newest by mtime, so
+    a stale directory or a second run in flight would attach another run's
+    judge scores to this one, logged as params and looking authoritative.
+    """
+    rubric = pathlib.Path(args.review_rubric) if args.review_rubric else next(
+        iter(sorted(tasks_path.glob("*/review/rubric.json"))
+             or [tasks_path / "review" / "rubric.json"]))
+    out_dir = cell_dir / "review"
+    rcmd = [
+        "benchflow", "review", str(cell_dir),
+        "--rubric", str(rubric),
+        "--agent", args.review_agent,
+        "--model", args.review_model,
+        "--sandbox", "docker",
+        "--concurrency", str(args.concurrency),
+        "--tasks-root", str(REPO / "tasks"),
+        # The reviewer recomputes each rollout's task_digest against this tree
+        # and refuses to admit task evidence that does not match, so the digest
+        # BenchFlow stamped at run time is enforced, not just recorded.
+        "--out-dir", str(out_dir),
+    ]
+    if args.review_network == "open":
+        rcmd.append("--allow-open-network")
+    print(f"reviewing {cell_dir.name} against {rubric.name} …")
+    rproc = subprocess.run(rcmd, capture_output=True, text=True)
+    (cell_dir / "review.log").write_text(rproc.stdout + rproc.stderr)
+    report = read_json(out_dir / "review_report.json")
+    if not report:
+        print(f"  review produced no report; see {cell_dir.name}/review.log",
+              file=sys.stderr)
+    return report
+
+
+def log_cell(mlflow, cell_dir: pathlib.Path, tasks_path: pathlib.Path,
+             args, golds: int, elapsed: float | None) -> dict:
+    """Log one evaluation's metrics and loose artifacts to the current run.
+
+    `elapsed` is the wrapper's wall clock, which includes the image build. A
+    trial inside a matrix has no wall clock of its own, so it passes None and
+    takes BenchFlow's own figure for that evaluation.
+    """
+    summary = summarise(cell_dir)
+    if elapsed is None:
+        elapsed = summary.get("elapsed_sec") or 0.0
+    tool_calls = summary.get("total_tool_calls") or 0
+
+    metrics = {
+        "pass_rate": summary.get("score_ratio", 0.0) or 0.0,
+        "mean_reward": summary.get("mean_reward") or 0.0,
+        "total": summary.get("total", 0) or 0,
+        "passed": summary.get("passed", 0) or 0,
+        "errored": summary.get("errored", 0) or 0,
+        "verifier_errored": summary.get("verifier_errored", 0) or 0,
+        "total_tool_calls": tool_calls,
+        "elapsed_sec": elapsed,
+        # Already computed by BenchFlow; cost per solved task is the
+        # number that makes efficiency legible (production-realism §1).
+        "total_cost_usd": summary.get("total_cost_usd") or 0.0,
+        "total_tokens": summary.get("total_tokens") or 0,
+        "total_input_tokens": summary.get("total_input_tokens") or 0,
+        "total_output_tokens": summary.get("total_output_tokens") or 0,
+        "avg_tool_calls_per_task": summary.get("avg_tool_calls_per_task") or 0.0,
+        # The validity flag belongs with the value. Under subscription auth
+        # there is no price source, so total_cost_usd is 0.0 meaning
+        # "unpriced" rather than "free" — indistinguishable without this.
+        "telemetry_coverage": summary.get("telemetry_coverage") or 0.0,
+        # Whether the skill was opened at all. Without it, "the skill did not
+        # help" and "the agent never read it" are the same number.
+        "total_skill_invocations": summary.get("total_skill_invocations") or 0,
+    }
+    passed = metrics["passed"]
+    if passed:
+        metrics["cost_per_solved_task_usd"] = metrics["total_cost_usd"] / passed
+    if golds:
+        # Efficiency: how many tool calls per action the task actually needed.
+        metrics["calls_per_gold_action"] = tool_calls / golds
+
+    health, complete = health_metrics(cell_dir)
+    metrics.update(health)
+
+    priced = metrics["total_cost_usd"] > 0
+    mlflow.set_tags({
+        # The dirty-tree rule, applied to outputs: a pass rate averaged over an
+        # arm that lost rollouts is still a number, and still looks like one
+        # from a whole arm. Tag it so a query can exclude it.
+        "coverage_complete": str(complete).lower(),
+        "cost_priced": str(priced).lower(),
+    })
+    if not complete and health:
+        print(f"  warning: {metrics['health_unscored_rollouts']:.0f} of "
+              f"{metrics['health_total_rollouts']:.0f} rollouts did not score; "
+              f"tagged coverage_complete=false", file=sys.stderr)
+
+    # Two levels of artifact, deliberately.
+    #
+    # Loose files first, so the common ones are one click away in the UI.
+    # Log every match rather than the first: a multi-task run writes one
+    # results.jsonl per task plus an aggregate, and an earlier `break` kept
+    # whichever rglob yielded first and dropped the rest.
+    for artifact in ("summary.json", "results.jsonl", "run.log", "health.json",
+                     "run-config.json", "task-manifest.json"):
+        for f in sorted(cell_dir.rglob(artifact)):
+            rel = str(f.parent.relative_to(cell_dir))
+            mlflow.log_artifact(str(f),
+                                artifact_path=None if rel == "." else rel)
+
+    if args.review:
+        report = run_review(args, cell_dir, tasks_path)
+        if report:
+            rparams, rmetrics = review_metrics(report)
+            mlflow.log_params(rparams)
+            mlflow.log_metrics(rmetrics)
+            mlflow.log_artifact(str(cell_dir / "review" / "review_report.json"))
+            metrics.update(rmetrics)
+
+    mlflow.log_metrics(metrics)
+    return metrics
+
+
+def log_trials(mlflow, jobs_dir: pathlib.Path, tasks_path: pathlib.Path,
+               args, golds: int, elapsed: float, prov: dict, parent) -> dict:
+    """One nested run per trial, and the spread across them on the parent.
+
+    The spread is the point. A 48-task arm has a sampling standard error near
+    7 points before the agent's own run-to-run variation, and nothing in a
+    single run distinguishes the two. Repeats of an identical arm measure the
+    second, which is what tells you whether a delta between two arms is a
+    difference or a coin toss.
+    """
+    matrix = read_json(jobs_dir / "matrix-summary.json")
+    cells = matrix.get("runs", [])
+    if not cells:
+        print("  no matrix summary; trials did not run", file=sys.stderr)
+        return {}
+    # The run-wide files live at the matrix root rather than in any cell, so
+    # the parent carries them; the per-cell ones hang off each nested run.
+    for name in ("matrix-summary.json", "matrix.yaml", "task-manifest.json",
+                 "run.log"):
+        if (jobs_dir / name).is_file():
+            mlflow.log_artifact(str(jobs_dir / name))
+    pass_rates, rewards, costs = [], [], []
+    for cell in cells:
+        cell_dir = pathlib.Path(cell["jobs_dir"])
+        with mlflow.start_run(nested=True,
+                              run_name=f"trial-{cell['trial']:02d}"):
+            mlflow.log_params({
+                "trial": cell["trial"],
+                "matrix_alias": cell["alias"],
+                "model": args.model,
+                "git_commit": prov["git"]["commit"],
+                "digest_combined": prov["digests"]["combined"],
+                "parent_run_id": parent.info.run_id,
+                "jobs_dir": rel_to_repo(cell_dir),
+            })
+            m = log_cell(mlflow, cell_dir, tasks_path, args, golds, None)
+            pass_rates.append(m.get("pass_rate", 0.0))
+            rewards.append(m.get("mean_reward", 0.0))
+            costs.append(m.get("total_cost_usd", 0.0))
+
+    metrics = {
+        "trials_completed": len(pass_rates),
+        "pass_rate_mean": statistics.fmean(pass_rates),
+        "pass_rate_min": min(pass_rates),
+        "pass_rate_max": max(pass_rates),
+        "pass_rate_spread": max(pass_rates) - min(pass_rates),
+        "mean_reward_mean": statistics.fmean(rewards),
+        "total_cost_usd": sum(costs),
+        "elapsed_sec": elapsed,
+    }
+    if len(pass_rates) > 1:
+        # The empirical noise floor: a delta between two arms smaller than
+        # this is not evidence of anything.
+        metrics["pass_rate_sd"] = statistics.stdev(pass_rates)
+    mlflow.log_metrics(metrics)
+    return metrics
+
+
+def briefing_identity(tasks_path: pathlib.Path, selected: list[str]) -> dict:
+    """Read which registered briefing these tasks were built from.
+
+    Read-only. The briefing lives in MLflow's prompt registry and `make_task.py`
+    pinned a version into every package at generation time, so there is one
+    authoritative copy and nothing here can change what ran. This only recovers
+    the pointer and logs it against the run.
+
+    The URI names an immutable version, so there is no drift to police -- the
+    one failure worth catching is a half-regenerated task set, where some
+    packages point at one briefing and some at another.
+    """
+    uris = {}
+    for task_dir in (d for d in task_dirs(tasks_path) if d.name in set(selected)):
+        head = (task_dir / "task.md").read_text()[:2000]
+        m = re.search(r"^\s+briefing_prompt_uri:\s*(\S+)\s*$", head, re.M)
+        uris[task_dir.name] = m.group(1) if m else "unstamped"
+
+    distinct = sorted(set(uris.values()))
+    if len(distinct) > 1:
+        raise SystemExit(
+            "Task set mixes briefings: " + ", ".join(distinct) + "\n"
+            "Some packages were generated against a different prompt version. "
+            "Regenerate the whole set:\n"
+            "  python tools/make_task.py $(cat tools/eligible_ids.txt) --out "
+            + tasks_path.name
+        )
+    uri = distinct[0]
+    if uri == "unstamped":
+        # Generated before briefings moved into the registry. Say so rather
+        # than guessing which prompt it was.
+        return {"briefing_prompt_uri": "unstamped"}
+    return {
+        "briefing_prompt_uri": uri,
+        "briefing_prompt_version": uri.rsplit("/", 1)[-1],
+    }
 
 
 def main() -> int:
@@ -160,6 +597,11 @@ def main() -> int:
     ap.add_argument("--note", default="")
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--skill-mode", default="no-skill")
+    # Repeats of one identical arm. The spread across trials is the noise
+    # floor: without it, no delta between two runs can be called a difference.
+    ap.add_argument("--trials", type=int, default=1,
+                    help="run the same arm N times (BenchFlow --matrix), one "
+                         "nested MLflow run per trial plus the spread")
     # BenchFlow's ACP runtime sets no temperature/top_p/seed, so reasoning
     # effort is the only generation knob reachable for claude-agent-acp.
     # Left unset it takes an unrecorded default; set it so it is recorded.
@@ -191,7 +633,12 @@ def main() -> int:
               f"which snapshot answered.\n      Pass a dated id "
               f"(e.g. {args.model}-20YYMMDD) to pin it.", file=sys.stderr)
 
-    prov = collect(args.agent)
+    tasks_path = (REPO / args.tasks if not args.tasks.startswith("/")
+                  else pathlib.Path(args.tasks))
+    selected = selected_tasks(tasks_path, args.include)
+    golds = gold_action_count(tasks_path, args.include)
+
+    prov = collect(args.agent, tasks_path)
     if prov["git"]["dirty"] and not args.allow_dirty:
         print("Refusing to run: the working tree has uncommitted changes.\n",
               file=sys.stderr)
@@ -200,6 +647,10 @@ def main() -> int:
         print("\nCommit them, or pass --allow-dirty to record an untrusted run.",
               file=sys.stderr)
         return 1
+    # A probe that cannot read what it claims to record says so here rather
+    # than logging a plausible "unknown" and letting the run look complete.
+    for w in prov["warnings"]:
+        print(f"warning: provenance incomplete — {w}", file=sys.stderr)
 
     import mlflow
 
@@ -213,34 +664,40 @@ def main() -> int:
         )
     mlflow.set_experiment(args.experiment)
 
-    tasks_path = REPO / args.tasks if not args.tasks.startswith("/") else pathlib.Path(args.tasks)
     stamp = time.strftime("%Y-%m-%d__%H-%M-%S")
     jobs_dir = REPO / "jobs" / f"mlf-{stamp}"
+    # BenchFlow resumes into a job directory that already holds results and
+    # skips the rollouts it considers done. That is useful and, for an arm,
+    # fatal: the second arm inherits the first one's rollouts and the
+    # comparison is of an arm against itself. The README said so; this enforces
+    # it, the same way the dirty-tree check enforces the commit rule.
+    if jobs_dir.exists() and any(jobs_dir.iterdir()):
+        print(f"Refusing to run: {rel_to_repo(jobs_dir)} is not empty.",
+              file=sys.stderr)
+        return 1
+    jobs_dir.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        "benchflow", "eval", "run",
-        "--tasks-dir", str(tasks_path),
-        "--context-root", str(REPO),
-        "--agent", args.agent,
-        "--model", args.model,
-        "--sandbox", "docker",
-        "--concurrency", str(args.concurrency),
-        "--skill-mode", args.skill_mode,
-        "--jobs-dir", str(jobs_dir),
-    ]
-    for inc in args.include:
-        cmd += ["--include", inc]
-    if args.config_override:
-        cmd += ["--config-override", args.config_override]
-    if args.reasoning_effort:
-        cmd += ["--reasoning-effort", args.reasoning_effort]
+    alias = re.sub(r"[^A-Za-z0-9._-]", "-", args.model)
+    if args.trials > 1:
+        write_matrix(jobs_dir / "matrix.yaml", alias, args.model)
+
+    cmd = build_cmd(args, tasks_path, jobs_dir, len(selected))
+
+    # Before the run starts, so a half-regenerated task set stops the run
+    # rather than being discovered after the rollouts are paid for.
+    briefing = briefing_identity(tasks_path, selected)
 
     with mlflow.start_run() as run:
         # Params: everything needed to reproduce this run exactly.
         mlflow.log_params({
+            **briefing,
             "git_commit": prov["git"]["commit"],
             "git_branch": prov["git"]["branch"],
             "provenance_version": prov["provenance_version"],
+            # tasks is BenchFlow's own task_digest, aggregated over the
+            # selected packages — the same value it stamps into every
+            # rollout's config.json and that `benchflow review --tasks-root`
+            # verifies before admitting a task as evidence.
             "digest_tasks": prov["digests"]["tasks"],
             "digest_environment": prov["digests"]["environment"],
             "digest_knowledge": prov["digests"]["knowledge"],
@@ -263,13 +720,23 @@ def main() -> int:
             "sampling_params": "harness-default (not exposed by ACP runtime)",
             "tasks": args.tasks,
             "include": ",".join(args.include) or "all",
+            "expected_tasks": len(selected),
             "concurrency": args.concurrency,
+            "trials": args.trials,
             "config_override": args.config_override or "none",
+            # The back-pointer. Without it, mapping a directory on disk to the
+            # run that produced it is timestamp arithmetic.
+            "jobs_dir": rel_to_repo(jobs_dir),
         })
         mlflow.set_tags({
             "dirty": str(prov["git"]["dirty"]).lower(),
             "note": args.note,
+            "provenance_complete": str(not prov["warnings"]).lower(),
         })
+        (jobs_dir / "mlflow_run_id").write_text(run.info.run_id + "\n")
+        digests_path = jobs_dir / "task-digests.json"
+        digests_path.write_text(json.dumps(prov.get("task_digests", {}), indent=2))
+        mlflow.log_artifact(str(digests_path))
 
         print(f"running: {' '.join(cmd[:6])} …")
         started = time.time()
@@ -277,53 +744,20 @@ def main() -> int:
         elapsed = time.time() - started
 
         log_path = jobs_dir / "run.log"
-        jobs_dir.mkdir(parents=True, exist_ok=True)
         log_path.write_text(proc.stdout + proc.stderr)
 
-        summary = summarise(jobs_dir)
-        golds = gold_action_count(tasks_path)
-        tool_calls = summary.get("total_tool_calls") or 0
+        if args.trials > 1:
+            metrics = log_trials(mlflow, jobs_dir, tasks_path, args, golds,
+                                 elapsed, prov, run)
+        else:
+            metrics = log_cell(mlflow, jobs_dir, tasks_path, args, golds,
+                               elapsed)
 
-        metrics = {
-            "pass_rate": summary.get("score_ratio", 0.0) or 0.0,
-            "mean_reward": summary.get("mean_reward") or 0.0,
-            "total": summary.get("total", 0) or 0,
-            "passed": summary.get("passed", 0) or 0,
-            "errored": summary.get("errored", 0) or 0,
-            "total_tool_calls": tool_calls,
-            "elapsed_sec": elapsed,
-            # Already computed by BenchFlow; cost per solved task is the
-            # number that makes efficiency legible (production-realism §1).
-            "total_cost_usd": summary.get("total_cost_usd") or 0.0,
-            "total_tokens": summary.get("total_tokens") or 0,
-            "total_input_tokens": summary.get("total_input_tokens") or 0,
-            "total_output_tokens": summary.get("total_output_tokens") or 0,
-            "avg_tool_calls_per_task": summary.get("avg_tool_calls_per_task") or 0.0,
-        }
-        passed = metrics["passed"]
-        if passed:
-            metrics["cost_per_solved_task_usd"] = metrics["total_cost_usd"] / passed
-        if golds:
-            # Efficiency: how many tool calls per action the task actually needed.
-            metrics["calls_per_gold_action"] = tool_calls / golds
-        mlflow.log_metrics(metrics)
-
-        # Two levels of artifact, deliberately.
-        #
-        # Loose files first, so the common ones are one click away in the UI.
-        # Log every match rather than the first: a multi-task run writes one
-        # results.jsonl per task plus an aggregate, and an earlier `break` kept
-        # whichever rglob yielded first and dropped the rest.
-        for artifact in ("summary.json", "results.jsonl", "run.log"):
-            for f in sorted(jobs_dir.rglob(artifact)):
-                rel = str(f.parent.relative_to(jobs_dir))
-                mlflow.log_artifact(str(f),
-                                    artifact_path=None if rel == "." else rel)
-
-        # Then the whole job directory as one archive. Those three files are an
+        # Then the whole job directory as one archive. The loose files are an
         # index, not a record: they omit config.json (the resolved config that
-        # actually ran), prompts.json (what the agent was actually sent), the
-        # raw trajectories, and the verifier's own output. Without the archive,
+        # actually ran, including the task_digest BenchFlow stamped),
+        # prompts.json (what the agent was actually sent), the raw
+        # trajectories, and the verifier's own output. Without the archive,
         # deleting jobs/ loses exactly the evidence you want when a result
         # surprises you.
         archive = jobs_dir.parent / f"{jobs_dir.name}.tar.gz"
@@ -334,39 +768,8 @@ def main() -> int:
         archive.unlink()
         print(f"  archived job dir: {size_mb:.1f} MB compressed")
 
-        if args.review:
-            rubric = pathlib.Path(args.review_rubric) if args.review_rubric else next(
-                iter(sorted(tasks_path.glob("*/review/rubric.json"))
-                     or [tasks_path / "review" / "rubric.json"]))
-            rcmd = [
-                "benchflow", "review", str(jobs_dir),
-                "--rubric", str(rubric),
-                "--agent", args.review_agent,
-                "--model", args.review_model,
-                "--sandbox", "docker",
-                "--concurrency", str(args.concurrency),
-                "--tasks-root", str(REPO / "tasks"),
-            ]
-            if args.review_network == "open":
-                rcmd.append("--allow-open-network")
-            print(f"reviewing against {rubric.name} …")
-            rproc = subprocess.run(rcmd, capture_output=True, text=True)
-            (jobs_dir / "review.log").write_text(rproc.stdout + rproc.stderr)
-            reports = sorted(REPO.glob("jobs/review-*/review_report.json"),
-                             key=lambda q: q.stat().st_mtime)
-            if reports:
-                report = json.loads(reports[-1].read_text())
-                rparams, rmetrics = review_metrics(report)
-                mlflow.log_params(rparams)
-                mlflow.log_metrics(rmetrics)
-                mlflow.log_artifact(str(reports[-1]))
-                metrics.update(rmetrics)
-            else:
-                print("  review produced no report; see review.log",
-                      file=sys.stderr)
-
         print(f"\nmlflow run: {run.info.run_id}")
-        print(f"jobs dir:   {jobs_dir.relative_to(REPO)}")
+        print(f"jobs dir:   {rel_to_repo(jobs_dir)}")
         for k, v in metrics.items():
             print(f"  {k}: {v}")
         return proc.returncode

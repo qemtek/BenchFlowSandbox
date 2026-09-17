@@ -5,8 +5,12 @@ A skill is reference material deployed into the agent's environment — a
 tools, BenchFlow has a first-class switch for skills, which makes the comparison
 clean without any rebuild.
 
-These task packages ship **no skills**. That is deliberate: you author the
-skill, so you control the variable instead of inheriting someone else's.
+Every task package ships one skill, `bank-case-handling`, generated from
+`SKILL_MD` in `tools/make_task.py`. It is shipped, not deployed:
+`--skill-mode no-skill` is the default and BenchFlow strips the directory out of
+the build context, so the baseline arm cannot see it. Replace it, or point
+`--skills-dir` at your own pack, when you want to control the variable yourself.
+What it contains and why is [docs/iterations/003](iterations/003-bank-case-handling-skill.md).
 
 ---
 
@@ -45,9 +49,19 @@ param, so which arm a run belongs to is recorded rather than remembered.
 
 ## A skill worth writing for this domain
 
-Let the observed failures choose the content. Seven of ten reviewed rollouts
-disclosed account details before logging verification, and one task took 63 tool
-calls against a one-action gold. A procedural skill targets exactly that:
+Let the observed failures choose the content, and check first that they are the
+agent's failures. Seven of ten reviewed rollouts failed
+`identity_verified_before_disclosure`, but that criterion was scoring an
+ordering no agent could produce — see
+[docs/iterations/001](iterations/001-identity-blocker-definition.md). Writing a
+skill against it would have been writing against the judge.
+
+What is left after that correction is worth targeting: rollouts that found the
+right document and then skipped its numbered eligibility checks, one that found
+the bypass-code procedure and escalated instead of completing it, two that
+passed a plausible `reason` code rather than the documented one, and a
+trajectory that spent its first six calls guessing tool names before its first
+search of `/data/documents`.
 
 ```markdown
 ---
@@ -57,12 +71,14 @@ description: Procedure for handling a Rho-Bank customer case end to end — iden
 
 # Handling a customer case
 
-## 1. Verify before you read anything back
+## 1. Verify before you change anything
 Look the customer up with `get_user_information_by_name`, `_by_email`, or
 `_by_id`. Compare what they told you against the record, then call
 `log_verification` with the values from the record.
 
-Reading an account detail back to the customer is disclosure. Verify first.
+The lookup is how you verify, so it comes first. What waits for
+`log_verification` is every operation that changes the bank's records, and
+every account detail you state in your closing report.
 
 ## 2. Find the procedure before acting
 `/data/documents` holds the bank's internal documentation. Eligibility rules,
@@ -85,7 +101,10 @@ You are judged on the bank's final records, not on what you say. Every action
 the customer needed must actually have been executed.
 ```
 
-Write it to `tasks/task-036/environment/skills/bank-case-handling/SKILL.md`.
+That is the shipped skill, at
+`tasks/*/environment/skills/bank-case-handling/SKILL.md`. Edit `SKILL_MD` in
+`tools/make_task.py` and regenerate to change it everywhere; drop a file in by
+hand to test a variant on one task.
 
 Note what this skill does *not* do: it never names a specific operation or
 argument value. A skill that does becomes an answer key, and any lift you
@@ -106,8 +125,10 @@ python tools/run_experiment.py --tasks tasks/task-036 \
 ```
 
 A skill that silently fails to deploy and a skill that does not help look
-identical in the score. `benchflow eval view jobs/<run>` renders the trajectory
-as a page, so you can see whether the agent read it at all.
+identical in the score. `total_skill_invocations` is logged on every run, so
+"the skill did not help" and "the agent never opened it" are different numbers
+rather than the same one; `benchflow eval view jobs/<run>` renders the
+trajectory as a page when you want to see how it was used.
 
 **2. Does it help?** Both arms over the whole set, separate job directories:
 
@@ -117,9 +138,9 @@ python tools/run_experiment.py --tasks tasks --skill-mode no-skill \
 python tools/run_experiment.py --tasks tasks --skill-mode with-skill \
   --experiment skills --note "bank-case-handling"
 
-benchflow eval compare-lift \
-  --baseline jobs/<baseline-run> --trained jobs/<skill-run> \
-  --out lift.md --json-out lift.json
+python tools/compare_arms.py \
+  --baseline <baseline-mlflow-run-id> --treatment <skill-mlflow-run-id> \
+  --note "bank-case-handling skill"
 ```
 
 The oracle gate does not test skills — it never runs the agent. Skills are the
@@ -129,8 +150,9 @@ one lever here with no cheap deterministic check, so budget for the rollouts.
 
 ## Reading the result honestly
 
-`compare-lift` pairs rollouts by task and reports pass-rate and mean-reward
-deltas with 95% bootstrap confidence intervals.
+`compare_arms.py` wraps `benchflow eval compare-lift`, which pairs rollouts by
+task and reports pass-rate and mean-reward deltas with 95% bootstrap confidence
+intervals, and records the comparison as its own MLflow run.
 
 **Scoring is binary.** A task is 1.0 or 0.0, so a skill shows up only when it
 flips a task outright. An agent that reaches the same answer in half the calls

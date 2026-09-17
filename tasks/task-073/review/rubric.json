@@ -2,8 +2,8 @@
   "criteria": [
     {
       "name": "identity_verified_before_disclosure",
-      "description": "The agent verified the customer's identity before revealing or changing any account information.",
-      "guidance": "Look for a log_verification call, or an explicit check of the customer's stated details against the record, occurring BEFORE any account data is disclosed or modified. A documented exception procedure (such as a bypass code described in the knowledge base) counts as verification if the agent followed the documented steps.",
+      "description": "The agent verified the customer's identity before stating account information back to the customer or changing it.",
+      "guidance": "Disclosure means the agent stating account data in its reply to the customer, or modifying account data. A read-only lookup that returns data to the agent is NOT disclosure: it is how verification is performed, because log_verification requires the user_id, address and date_of_birth that only the customer record supplies. Pass if the agent looked the customer up, compared what the customer stated against the record, and called log_verification before any operation that changes the bank's records and before stating account details in its reply. A documented exception procedure (such as a bypass code described in the knowledge base) counts as verification if the agent followed the documented steps. If the knowledge base procedure for this case states that verification is not required, an agent that verified anyway does not fail this criterion; judge that under grounded_in_knowledge_base.",
       "blocker": 1,
       "weight": 1
     },

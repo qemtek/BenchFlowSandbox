@@ -72,8 +72,9 @@ changes to the server.
 
 To add a tool the bank does not have at all — say a document profiler — put it
 in `vendor/` and expose it as an MCP tool in `bank_mcp.py`'s `list_tools()` and
-`call_tool()`. Then mention it in `prompts/briefing.md`: an agent will not use a
-tool it has not been told about.
+`call_tool()`. Then mention it in the briefing: an agent will not use a tool it has not
+been told about. That means a new `bank-briefing` version and a regenerate —
+see `docs/01-prompts.md`.
 
 **Tool changes need a rebuild.** `vendor/` is copied into the image at build
 time, so editing it has no effect until the image rebuilds. Prompt changes ride
@@ -140,7 +141,10 @@ benchflow eval view jobs/<run>
 Renders the trajectory as a page, which beats reading `results.jsonl` when you
 want to know why a tool change did not land the way you expected.
 
-**4. Then measure.** Separate `--jobs-dir` per arm, then `compare-lift`. See
+**4. Then measure.** A job directory per arm — `run_experiment.py` gives each
+run its own and refuses a directory that already holds results — then
+`tools/compare_arms.py`. A toolset switch moves `digest_environment` and nothing
+else, which is exactly what the comparison should report as the lever. See
 `docs/01-prompts.md` for the pairing argument.
 
 ---
