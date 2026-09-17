@@ -35,6 +35,12 @@ simulate before asserting. Two drafts of page 02 explained pairing wrongly, and
 both read as plausible; a simulation caught them. Put the script in `scripts/`,
 seed it, and quote its output.
 
+**Every figure must trace to a committed script or a stated formula.** Quoting a
+number from a throwaway run is how page 03 came to claim a `+6.2pp` bound that
+nothing could reproduce; the committed script gives `+8.3pp`. Seed each
+simulation independently, so adding or removing one does not silently shift the
+figures in another.
+
 **Say what the method cannot do.** Page 02 was only useful once it stated that
 pairing does nothing for agent variance. A page that lists only benefits leaves
 the reader unable to tell when the method will not help.

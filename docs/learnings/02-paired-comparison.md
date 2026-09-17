@@ -89,7 +89,11 @@ roughly 2.8 standard errors, the margin at which a result is unlikely to be
 chance.
 
 **Paired.** Precision depends on how many tasks the two arms disagree on, and
-not at all on the pass rate:
+not at all on the pass rate. Writing `d` for the fraction of tasks that differ:
+
+```
+SE = √( d / n )
+```
 
 ```
 tasks that differ    standard error    detectable effect
@@ -105,7 +109,12 @@ tasks in the same direction is easier to distinguish from chance than one that
 flips fourteen in both directions.
 
 **Compared by overall rate.** Precision depends on where the pass rates sit, and
-not at all on how much the arms agree:
+not at all on how much the arms agree. This is the two-arm formula from
+[page 01](01-standard-error.md), with both arms at the same pass rate `p`:
+
+```
+SE = √( 2p(1−p) / n )
+```
 
 ```
 both arms at         standard error    detectable effect

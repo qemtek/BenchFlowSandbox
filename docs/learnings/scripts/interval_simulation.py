@@ -39,6 +39,7 @@ def bootstrap_ci(improved: int, regressed: int) -> tuple[float, float]:
 def resample_count_demo() -> None:
     """What B buys you: steadier endpoints, not a narrower interval."""
     import statistics
+    random.seed(11)
     pool = [1] * 5 + [-1] * 1 + [0] * (N - 6)   # one fixed experiment
 
     def ci(b):
@@ -46,7 +47,7 @@ def resample_count_demo() -> None:
                    for _ in range(b))
         return d[int(0.025 * b)], d[int(0.975 * b)]
 
-    print("\nC. Same data, different resample counts (10 repeats each)")
+    print("\nB. Same data, different resample counts (10 repeats each)")
     for b in (100, 1000, 10000):
         los, his = zip(*(ci(b) for _ in range(10)))
         print(f"   B={b:<6} low {statistics.mean(los) * 100:+5.1f}pp "
@@ -55,33 +56,39 @@ def resample_count_demo() -> None:
               f"(varies by {(max(his) - min(his)) * 100:.1f})")
 
 
+def degenerate_demo() -> None:
+    """Too few differing tasks: the interval collapses toward a point."""
+    random.seed(23)
+    for differing in (1, 2):
+        pool = [1] * differing + [0] * (N - differing)
+        deltas = sorted(
+            sum(random.choice(pool) for _ in range(N)) / N for _ in range(BOOT)
+        )
+        lo, hi = deltas[int(0.025 * BOOT)], deltas[int(0.975 * BOOT)]
+        print(f"   {differing} task differs of {N}:   "
+              f"{lo * 100:+.1f}pp to {hi * 100:+.1f}pp"
+              if differing == 1 else
+              f"   {differing} tasks differ of {N}:  "
+              f"{lo * 100:+.1f}pp to {hi * 100:+.1f}pp")
+
+
 def main() -> None:
     random.seed(7)
 
-    # A. Two arms that are genuinely identical. Tasks still flip both ways,
-    #    because the agent is stochastic.
-    false_alarms = 0
-    for _ in range(RUNS):
-        lo, hi = bootstrap_ci(*one_experiment(0.10, 0.10))
-        if lo > 0 or hi < 0:
-            false_alarms += 1
-    rate = false_alarms / RUNS
-    print("A. No real effect, 10% of tasks flipping each way")
-    print(f"   interval excluded zero:      {rate:.0%} of runs (by design, ~5%)")
-    print(f"   five arms, none better:      {1 - (1 - rate) ** 5:.0%} chance "
-          "at least one looks real")
-
-    # B. A genuine 10-point improvement.
+    # A. A genuine 10-point improvement.
     detected = 0
     for _ in range(RUNS):
         lo, _ = bootstrap_ci(*one_experiment(0.12, 0.02))
         if lo > 0:
             detected += 1
-    print("\nB. Real 10-point gain (12% improve, 2% regress)")
+    print("A. Real 10-point gain (12% improve, 2% regress)")
     print(f"   zero outside the range:      {detected / RUNS:.0%} of runs")
     print(f"   zero inside the range:       {1 - detected / RUNS:.0%} of runs")
 
     resample_count_demo()
+
+    print("\nC. Too few tasks differing")
+    degenerate_demo()
 
 
 if __name__ == "__main__":

@@ -81,12 +81,12 @@ interval. It steadies the endpoints:
 
 ```
 same data, ten repeats each
-B=100      low  -1.2pp (varies by 2.1)   high +18.3pp (varies by 4.2)
+B=100      low  -0.8pp (varies by 4.2)   high +17.7pp (varies by 6.2)
 B=1000     low  -0.2pp (varies by 2.1)   high +18.8pp (varies by 0.0)
 B=10000    low  +0.0pp (varies by 0.0)   high +18.8pp (varies by 0.0)
 ```
 
-At B=100 the upper endpoint moves by 4 points between runs on identical data,
+At B=100 the upper endpoint moves by 6 points between runs on identical data,
 which is an artefact of the resampling rather than anything in the experiment.
 By 1,000 it has settled, so the default is fine.
 
@@ -172,19 +172,19 @@ substantially more tasks or repeat runs.
 
 ## Running several comparisons
 
-A 95% interval excludes the true value 5% of the time by construction. A
-bootstrap percentile interval is approximate, so its real rate is near but not
-exactly that; measured on this setup it is 4%.
+A 95% interval leaves the true value outside the range 5% of the time. That is
+what the 95% means, and it applies to every comparison you run.
 
-Simulating five arms that are all genuinely identical, each with its own 4%
-chance of a false alarm:
+Run one comparison and you accept a 5% chance of a false alarm. Run five and you
+have five chances to be unlucky:
 
 ```
-chance at least one looks significant:  18%
+chance all five are clean      0.95 × 0.95 × 0.95 × 0.95 × 0.95  =  77%
+chance at least one is not     100% − 77%                        =  23%
 ```
 
-So if you test five variants, there is roughly a one in five chance that one of
-them looks better purely by accident.
+So if you test five variants that are all equally good, roughly one time in four
+one of them will look better purely by accident.
 
 Three defences, cheapest first:
 
@@ -196,17 +196,20 @@ Three defences, cheapest first:
 
 ## Where bootstrapping breaks down
 
-**Few tasks differing.** With one task differing out of 48, the interval
+**Few tasks differing.** With one or two tasks differing out of 48, the interval
 collapses toward a point:
 
 ```
-1 task differs:    +0.0pp to +6.2pp
+1 task differs of 48:    +0.0pp to  +8.3pp
+2 tasks differ of 48:    +0.0pp to +10.4pp
 ```
 
-The upper bound is 3/48, because a resample can draw that single task up to
-three times. With one paired task in total it degenerates entirely: the two
-bounds and the observed delta are the same number, and the interval carries no
-information while appearing exact.
+Both lower bounds are zero, because most resamples miss the differing task
+entirely. The upper bound of 8.3pp is 4/48, which is what you get when a
+resample happens to draw that one task four times.
+
+An interval that cannot go below zero is not evidence that the change helped. It
+reflects having almost no data on the question.
 
 **A biased task set.** Resampling cannot reveal anything about tasks you did not
 include. If the set over-represents one kind of case, every draw inherits that,
