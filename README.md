@@ -286,7 +286,11 @@ python tools/provenance.py --agent claude-agent-acp
 
 **Do not compare aggregate pass rates.** With 48 binary tasks, sampling noise
 alone puts the standard error near 7 percentage points, before any agent
-stochasticity. A 56% → 62% "improvement" tells you nothing.
+stochasticity. A 56% → 62% "improvement" tells you nothing. Worse, comparing two
+arms independently needs a 29-point effect before it can reliably see anything.
+
+Both figures are derived in
+[docs/learnings/01-standard-error.md](docs/learnings/01-standard-error.md).
 
 Pair them instead. BenchFlow does this natively:
 
@@ -298,7 +302,10 @@ benchflow eval compare-lift \
 
 `compare-lift` matches rollouts task by task and reports pass-rate and
 mean-reward deltas with bootstrap confidence intervals. Pairing cancels task
-difficulty, which is most of the variance.
+difficulty, which is most of the variance, and roughly halves the effect size
+you can detect. The mechanism — only the tasks the two arms *disagree* on carry
+information — is in
+[docs/learnings/02-paired-comparison.md](docs/learnings/02-paired-comparison.md).
 
 Three things to check before believing a result:
 
@@ -397,6 +404,8 @@ in production. See [versioning-gaps](docs/versioning-gaps.md).
 
 ## Where to go next
 
+- **[docs/learnings/](docs/learnings/)** — how to tell a result from a
+  coincidence: standard error, paired comparison
 - **[docs/01-prompts.md](docs/01-prompts.md)** — three levels of prompt change
 - **[docs/02-tools.md](docs/02-tools.md)** — the MCP surface and toolsets
 - **[docs/03-skills.md](docs/03-skills.md)** — authoring and testing a skill
