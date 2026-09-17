@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """MCP server exposing the bank's operations as structured tools.
 
-Structured tool calls: the agent gets real tool definitions instead of
-# composing JSON inside shell quoting. The CLI makes the agent compose JSON inside
-shell quoting:
+This is the agent's only interface to the bank. It advertises the 14-tool core
+toolkit with each tool's real JSON schema, plus three tools that reach the 44
+specialised operations:
 
-    bank call call_discoverable_agent_tool '{"agent_tool_name":"x","arguments":"{\\"user_id\\": \\"1\\"}"}'
+    bank_search              find an operation by describing what you want
+    bank_describe_operation  read its signature: arguments, types, defaults
+    bank_call_operation      run it, passing arguments as an object
 
-No deployed agent works that way — it calls a tool against a schema. This serves
-the same dispatcher over MCP so BenchFlow can wire it in through
-``[[sandbox.mcp_servers]]``, giving the agent real tool definitions.
+It replaced a shell CLI that made the agent compose JSON inside shell quoting.
+No deployed agent works that way — it calls a tool against a schema.
 
-Both interfaces stay available, which makes CLI-versus-MCP a clean experiment:
-same tasks, same scoring, one variable.
+bank_cli.py is still imported here for the dispatcher, session state, autounlock
+and toolset filtering, but it is no longer an interface and is not on PATH.
 
 Speaks MCP over stdio using JSON-RPC 2.0 — stdlib only, no SDK.
 """
