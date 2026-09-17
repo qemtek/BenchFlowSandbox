@@ -87,32 +87,53 @@ need more tasks or more repeat runs, never more resamples.
 
 ## Intervals that cross zero
 
-An interval **crosses zero** when its lower bound is negative and its upper
-bound positive:
+The interval is a range of plausible values for the true difference between the
+two configurations. Zero is the value that means "the two are equally good".
+
+So the useful question is whether zero falls inside the range.
 
 ```
--3pp  ────────────●────────────  +11pp        crosses zero
+-3pp  ────────────●────────────  +11pp        zero is inside
                   ▲ zero
 
-+1pp  ────────────────●────────  +7pp         does not
++1pp  ────────────────●────────  +7pp         zero is outside
 ```
 
-In the first case the data is consistent with the treatment being worse,
-identical, or better. In the second, every value in the range is an improvement,
-so the direction is settled even if the size is not.
+In the top case the plausible answers run from "the treatment is 3 points worse"
+through "no difference at all" to "the treatment is 11 points better". The
+experiment has not told you which of those is true.
 
-Crossing zero means the result was **not shown**. It does not mean there is no
-effect. Simulating a genuine 10-point improvement on a 48-task paired
-comparison:
+In the bottom case every value in the range is positive. You still do not know
+the size of the improvement, but every plausible answer is an improvement, so
+the direction is settled.
+
+### What you can conclude, and what you cannot
+
+When zero is inside the range, three statements are available and only one of
+them is true:
 
 ```
-detected:                 51% of runs
-reported as "not shown":  49% of runs
+"the treatment is better"        not supported — zero is still plausible
+"the treatment is no better"     not supported — +11 is equally plausible
+"this experiment could not tell" supported
 ```
 
-A real 10-point gain produces an interval spanning zero about half the time, so
-reporting that as "no effect" would be wrong on a coin flip. "The interval spans
-−2 to +11, so this task set cannot resolve it" is the accurate version.
+The second is the one people reach for, and it is the mistake. Failing to
+demonstrate an improvement is not the same as demonstrating there was none.
+
+The gap between them is large. Simulating a genuine 10-point improvement on a
+48-task paired comparison, and counting how often the interval keeps zero out:
+
+```
+zero outside the range:   51% of runs
+zero inside the range:    49% of runs
+```
+
+A real 10-point gain leaves zero inside the range about half the time. Treating
+that as evidence of no effect would be wrong on a coin flip.
+
+Write the third statement instead: "the interval runs from −2 to +11, so this
+task set cannot resolve the question."
 
 ---
 

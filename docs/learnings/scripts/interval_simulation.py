@@ -78,8 +78,8 @@ def main() -> None:
         if lo > 0:
             detected += 1
     print("\nB. Real 10-point gain (12% improve, 2% regress)")
-    print(f"   detected:                    {detected / RUNS:.0%} of runs")
-    print(f"   reported as 'not shown':     {1 - detected / RUNS:.0%} of runs")
+    print(f"   zero outside the range:      {detected / RUNS:.0%} of runs")
+    print(f"   zero inside the range:       {1 - detected / RUNS:.0%} of runs")
 
     resample_count_demo()
 

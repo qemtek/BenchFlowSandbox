@@ -11,7 +11,7 @@ these tell you how to know whether the change did anything.
 |---|---|---|
 | 01 | [How much a pass rate moves](01-standard-error.md) | reading a 6-point difference as an improvement |
 | 02 | [Reducing variance](02-paired-comparison.md) | comparing overall pass rates, or expecting pairing to cancel agent noise |
-| 03 | [Confidence intervals](03-bootstrapping.md) | trusting a narrow interval, or calling "not shown" a proven absence of effect |
+| 03 | [Confidence intervals](03-bootstrapping.md) | trusting a narrow interval, or reading "we could not tell" as "there was no difference" |
 
 `scripts/` holds the simulations behind the figures in pages 02 and 03. They
 are documentation evidence rather than part of the evaluation code, and each is

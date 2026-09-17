@@ -319,9 +319,9 @@ Three things to check before believing a result:
 - **The coverage table, before the delta.** Only tasks with a healthy scored
   rollout on *both* sides enter the paired metrics, so a crash in one arm
   silently drops that task.
-- **Whether the interval crosses zero** — that is, whether its range runs from
-  a negative number to a positive one, leaving the direction unsettled. If it
-  does, the result is "not shown", not "no effect".
+- **Whether zero falls inside the interval.** If it does, "no difference" is
+  still a plausible answer, but so is a large improvement. The experiment could
+  not tell which, and that is different from showing the change did not help.
 - **Whether the effect could be invisible.** Scoring is binary, so an agent that
   reaches the same answer in half the calls scores identically. Watch
   `calls_per_gold_action` and `cost_per_solved_task_usd` for that.

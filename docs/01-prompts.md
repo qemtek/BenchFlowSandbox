@@ -155,7 +155,8 @@ Read the coverage table before the delta. Only tasks with a healthy scored
 rollout on **both** sides enter the paired metrics, so a crash in one arm
 silently drops that task.
 
-Treat a delta whose interval crosses zero as "not shown", not as "no effect".
+If the interval includes zero, the experiment could not tell whether the change
+helped. That is different from showing it did not help.
 
 ---
 

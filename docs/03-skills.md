@@ -140,7 +140,8 @@ in MLflow for that — both are logged, neither is scored.
 **48 tasks is a modest sample.** Sampling noise alone puts the standard error on
 pass rate near 7 percentage points, before any agent stochasticity. Pairing
 cancels task difficulty, which is most of it, but the interval will still be
-wide. Treat a delta whose interval crosses zero as "not shown", not "no effect".
+wide. If the interval includes zero, the experiment could not tell whether the
+skill helped, which is different from showing it did not.
 With a single paired task the bootstrap degenerates entirely: low, high and the
 observed delta collapse to the same number.
 
