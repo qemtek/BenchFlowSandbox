@@ -16,8 +16,8 @@ is +8.3 points.
 Run the same two arms again and you would get a different figure. How different?
 You would need the sampling distribution of a paired delta over binary outcomes
 to answer that from a formula — and picking the wrong formula is easy, because
-the textbook approximations assume shapes this data does not have at n=48 with 6
-discordant pairs.
+the textbook approximations assume shapes this data does not have when only 6 of
+48 tasks differ between the arms.
 
 Bootstrapping sidesteps the question. Instead of deriving the distribution, it
 builds one from the data you already have.
@@ -75,8 +75,8 @@ interval is too wide, you need more tasks or repeats, not more resamples.
 
 ## Where it breaks down
 
-**Too few discordant pairs.** With only one task differing out of 48, the
-interval collapses toward a point:
+**Too few tasks differing between the arms.** With only one task differing out
+of 48, the interval collapses toward a point:
 
 ```
 1 task differs:    +0.0pp to +6.2pp
@@ -99,7 +99,21 @@ resample identically. The bootstrap has no view of it.
 
 ## Reading what comes out
 
-### "Crosses zero" means *not shown*, not *no effect*
+### An interval that crosses zero means *not shown*, not *no effect*
+
+An interval **crosses zero** when its lower bound is negative and its upper
+bound is positive:
+
+```
+-3pp  ────────────●────────────  +11pp        crosses zero
+                  ▲ zero
+
++1pp  ────────────────●────────  +7pp         does not
+```
+
+In the first case the data is consistent with the treatment being worse,
+identical, or better. In the second, every value in the range is an improvement,
+so the direction is settled even though the size is not.
 
 The two get conflated constantly, and the gap is large. Simulating a genuine
 10-point improvement on a 48-task paired comparison:

@@ -5,6 +5,10 @@ configuration twice and you get two different numbers. Standard error is how far
 apart those numbers are expected to be, and knowing it is what separates a
 result from a coincidence.
 
+Throughout these pages, an **arm** is one complete configuration — prompt,
+toolset, skill mode, model, harness — run over the task set. Comparing two arms
+is the whole activity.
+
 ---
 
 ## The number for our set
@@ -23,6 +27,12 @@ SE = √( p(1−p) / n )
 
 **About 7 percentage points.** A single arm scoring 56% is really saying
 "somewhere around 49–63%, at one standard error".
+
+A note on units, used throughout these pages. A **percentage point** (`pp`) is
+an absolute difference between two percentages. Going from 56% to 62% is a rise
+of 6 percentage points, but a rise of about 11% in relative terms. Everything
+here is in percentage points, because that is what "how many tasks changed"
+translates into directly: on a 48-task set, one task is 2.1pp.
 
 ---
 

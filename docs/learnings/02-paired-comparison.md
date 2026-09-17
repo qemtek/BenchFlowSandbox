@@ -103,19 +103,42 @@ changed, did more improve than regressed, and by enough to outrun chance".
 
 ## A worked example
 
+You ran both arms over all 48 tasks and sorted the results into the four cells:
+
 ```
-both passed                      28 tasks     d = 0
-both failed                      14 tasks     d = 0
-improved (fail → pass)            5 tasks     d = +1
-regressed (pass → fail)           1 task      d = −1
-                                 ──────────
-delta = (5 − 1) / 48 = +8.3pp
+                                              d_i     count
+both passed                                    0       28
+both failed                                    0       14
+improved   (failed baseline, passed treatment) +1        5
+regressed  (passed baseline, failed treatment) −1        1
+                                                      ────
+                                                        48
 ```
 
-Aggregate view: 29/48 → 33/48 inside a ±20-point interval. Unreadable.
+The delta is the mean of all 48 per-task differences. Forty-two of them are
+zero, so the sum is just the improvements minus the regressions:
 
-Paired view: the same +8.3pp, but the 42 agreements contribute no variance, so
-the interval around it is roughly a third as wide.
+```
+sum of d_i   =  (5 × +1) + (1 × −1) + (42 × 0)  =  +4
+delta        =  4 / 48                          =  0.083
+             =  +8.3 percentage points
+```
+
+Read that as: **the treatment passed four more tasks than the baseline, and four
+tasks out of forty-eight is 8.3 percentage points.**
+
+The aggregate route gives the identical number, which is the point:
+
+```
+baseline   28 + 1 = 29 passed  →  29/48 = 60.4%
+treatment  28 + 5 = 33 passed  →  33/48 = 68.8%
+                                  difference = 8.3 percentage points
+```
+
+Same delta both ways. What differs is the interval around it. Computed
+unpaired, the interval spans roughly ±20 points and the result is unreadable.
+Computed paired, the 42 tasks that agreed contribute no variance, so the
+interval is roughly a third as wide.
 
 ---
 
@@ -174,10 +197,15 @@ not 48 — and crashes are not random, they cluster on the long, complicated
 tasks. The delta is then computed over an easier subset without saying so. Read
 coverage before you read the delta.
 
-**Reading "interval crosses zero" as "no effect".** It means *not shown*. You
-failed to detect something, which is equally consistent with a real effect too
-small for this task set. Absence of evidence is not evidence of absence, and
-this is the most common way to mislead yourself here.
+**Reading "the interval crosses zero" as "no effect".** An interval crosses
+zero when its lower bound is negative and its upper bound is positive — say −3
+to +11. The data is then consistent with the treatment being worse, identical,
+or better, so it has not settled which.
+
+That means *not shown*. You failed to detect something, which is equally
+consistent with a real effect too small for this task set to resolve. This is
+the most common way to mislead yourself here, and
+[03-bootstrapping](03-bootstrapping.md) puts a number on how often it happens.
 
 **Expecting an invisible effect to appear.** Scoring is binary. An agent that
 reaches the identical answer in half the tool calls scores exactly the same. If
