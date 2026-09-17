@@ -1,29 +1,16 @@
-# Bootstrapping: where the interval comes from, and how to read it
+# Where the interval comes from, and what it means
 
-A comparison gives you a delta and an interval around it. This page covers
-where the interval comes from and what it is safe to claim.
+A comparison gives you a delta and an interval around it. This page covers how
+the interval is built and what it licenses you to say.
 
-Every number below is reproducible: `python docs/learnings/interval_simulation.py`.
-
----
-
-## The problem it solves
-
-You ran two arms and 6 of 48 tasks changed. Run the same two arms again and you
-would get a different figure. How different?
-You would need the sampling distribution of a paired delta over binary outcomes
-to answer that from a formula — and picking the wrong formula is easy, because
-the textbook approximations assume shapes this data does not have when only 6 of
-48 tasks differ between the arms.
-
-Bootstrapping sidesteps the question. Instead of deriving the distribution, it
-builds one from the data you already have.
+Figures come from `python docs/learnings/interval_simulation.py`.
 
 ---
 
-## How it works
+## Building it
 
-After pairing, each task holds one of three outcomes:
+After pairing, each of the 48 tasks holds one of three outcomes. Suppose five
+improved, one regressed, and the rest agreed:
 
 ```
 +1   improved      5 tasks
@@ -31,27 +18,32 @@ After pairing, each task holds one of three outcomes:
  0   agreed       42 tasks
 ```
 
-Those 48 values are the entire input. The procedure is three lines:
+Those 48 values are the whole input. The procedure:
 
-1. Draw 48 outcomes **from that set, with replacement**. Some tasks get picked
+1. Draw 48 outcomes from that set, with replacement. Some tasks get picked
    twice, some not at all.
 2. Compute the delta for that draw.
 3. Repeat 1,000 times, then take the 2.5th and 97.5th percentiles of the 1,000
    deltas.
 
-That range is the interval. The logic behind it: your 48 tasks are a sample from
-some larger population of possible tasks, and in the absence of that population,
-the sample is the best stand-in available. Drawing from it repeatedly imitates
-drawing fresh task sets.
+That range is the interval.
 
-The result makes no assumption about the shape of the distribution, which is
-what makes it the right tool when you do not know the shape.
+The reasoning is that your 48 tasks are a sample from a larger population of
+possible tasks. You do not have that population, so the sample stands in for it,
+and drawing from the sample repeatedly imitates drawing fresh task sets.
+
+The result is an answer to one question: **given the 48 tasks I happen to have,
+how much would this delta move if I had drawn a different 48?**
+
+A formula exists for this particular case, but it needs choosing correctly and
+its approximations get unreliable when few tasks differ. Resampling needs no
+derivation and no assumption about the shape of the distribution.
 
 ---
 
-## What the resample count buys you
+## What the resample count controls
 
-`--bootstrap-samples` defaults to 1,000. Raising it does **not** narrow the
+`--bootstrap-samples` defaults to 1,000. Raising it does not narrow the
 interval. It steadies the endpoints:
 
 ```
@@ -61,45 +53,19 @@ B=1000     low  -0.2pp (varies by 2.1)   high +18.8pp (varies by 0.0)
 B=10000    low  +0.0pp (varies by 0.0)   high +18.8pp (varies by 0.0)
 ```
 
-At B=100 the upper endpoint wanders by 4 points between runs on identical data,
-which is pure simulation artefact. By B=1,000 it has settled. The default is
-fine; there is nothing to gain by raising it and a real cost to lowering it.
+At B=100 the upper endpoint moves by 4 points between runs on identical data,
+which is an artefact of the resampling rather than anything in the experiment.
+By 1,000 it has settled, so the default is fine.
 
-Width comes from your data — how many tasks disagreed — not from B. If the
-interval is too wide, you need more tasks or repeats, not more resamples.
-
----
-
-## Where it breaks down
-
-**Too few tasks differing between the arms.** With only one task differing out
-of 48, the interval collapses toward a point:
-
-```
-1 task differs:    +0.0pp to +6.2pp
-```
-
-With a single paired task it degenerates completely: low, high and the observed
-delta are all the same number, and the interval carries no information at all
-while looking perfectly confident.
-
-**A biased task set.** Resampling your 48 tasks cannot reveal anything about
-tasks you did not include. If the set over-represents one kind of case, every
-bootstrap draw inherits that, and the interval will be tight around a number
-that does not generalise. **A narrow interval around a wrong estimate is still
-wrong.**
-
-**Anything systematically broken.** A verifier bug affects both arms and every
-resample identically. The bootstrap has no view of it.
+Width comes from how many tasks disagreed, not from B. A wide interval means you
+need more tasks or more repeat runs, never more resamples.
 
 ---
 
-## Reading what comes out
-
-### An interval that crosses zero means *not shown*, not *no effect*
+## An interval that crosses zero
 
 An interval **crosses zero** when its lower bound is negative and its upper
-bound is positive:
+bound positive:
 
 ```
 -3pp  ────────────●────────────  +11pp        crosses zero
@@ -110,55 +76,90 @@ bound is positive:
 
 In the first case the data is consistent with the treatment being worse,
 identical, or better. In the second, every value in the range is an improvement,
-so the direction is settled even though the size is not.
+so the direction is settled even if the size is not.
 
-The two get conflated constantly, and the gap is large. Simulating a genuine
-10-point improvement on a 48-task paired comparison:
+Crossing zero means the result was **not shown**. It does not mean there is no
+effect. Simulating a genuine 10-point improvement on a 48-task paired
+comparison:
 
 ```
 detected:                 51% of runs
 reported as "not shown":  49% of runs
 ```
 
-**Half the time, a real 10-point gain produces an interval spanning zero.**
-Calling that "no effect" would be wrong on a coin flip.
+A real 10-point gain produces an interval spanning zero about half the time, so
+reporting that as "no effect" would be wrong on a coin flip. "The interval spans
+−2 to +11, so this task set cannot resolve it" is the accurate version.
 
-Write down what happened. "The interval spans −2 to +11, so this task set cannot
-resolve it" is honest. "No difference" is a claim the data cannot support.
+---
 
-### Showing there *is* no difference is a different experiment
-
-If you genuinely need "these two arms are equivalent", a wide interval will not
-deliver it. State in advance what difference would be too small to care about,
-then show the interval sits **entirely inside** that band. At 48 tasks it is
-nowhere near tight enough. Worth knowing before you promise anyone that a
-refactor changed nothing.
-
-### Width tells you more than the midpoint
+## Width matters more than the midpoint
 
 ```
 delta +4pp, interval -16 to +24    the experiment could not resolve this
-delta +4pp, interval  +1 to  +7    a small effect, actually measured
+delta +4pp, interval  +1 to  +7    a small effect, measured
 ```
 
-Same delta. Only the second is a result. Read the width first — it tells you
-whether the midpoint is worth reading at all.
+The same delta appears in both. Only the second carries information, because
+only there does the range exclude the possibility of no change.
 
-### Several arms multiply your false alarms
+---
 
-A 95% interval is wrong 5% of the time by construction. Simulating five arms
-that are all genuinely identical:
+## Showing that two arms are equivalent
+
+A wide interval does not establish "no difference". If you need that claim, set
+out in advance what difference would be too small to care about, then show the
+interval sits entirely inside that band.
+
+At 48 tasks the intervals are nowhere near tight enough to do this, so it takes
+substantially more tasks or repeat runs.
+
+---
+
+## Running several comparisons at once
+
+A 95% interval excludes the true value 5% of the time by construction. A
+bootstrap percentile interval is approximate, so its real rate is near but not
+exactly that; measured on this setup it is 4%.
+
+Simulating five arms that are all genuinely identical, each with its own 4%
+chance of a false alarm:
 
 ```
 chance at least one looks significant:  18%
 ```
 
-Roughly one session in five where you try five variants hands you a false
-winner. It will be the one you remember, because it confirmed something.
+So one session in five where you try five variants produces a false winner,
+which will tend to be the variant you then pursue.
 
-Three defences, cheapest first: decide what you are testing before you run it;
-count your comparisons and say the number out loud; confirm the winner on a
-fresh run. Only the last one settles it.
+Three defences, cheapest first:
+
+- decide what you are testing before running it
+- report how many comparisons you ran alongside the result
+- rerun the apparent winner, which is the only one that settles it
+
+---
+
+## Where the method breaks down
+
+**Few tasks differing.** With one task differing out of 48, the interval
+collapses toward a point:
+
+```
+1 task differs:    +0.0pp to +6.2pp
+```
+
+The upper bound is 3/48, because a resample can draw that single task up to
+three times. With one paired task in total it degenerates entirely: the two
+bounds and the observed delta are the same number, and the interval carries no
+information while appearing exact.
+
+**A biased task set.** Resampling cannot reveal anything about tasks you did not
+include. If the set over-represents one kind of case, every draw inherits that,
+and the interval will be tight around a number that does not generalise.
+
+**Anything systematically wrong.** A verifier bug affects both arms and every
+resample identically, so the bootstrap has no view of it.
 
 ---
 
@@ -172,25 +173,12 @@ benchflow eval compare-lift --baseline jobs/a --trained jobs/b \
 ```
 
 Without it the endpoints shift slightly between invocations on identical data,
-because the resampling is random. Harmless for a glance, embarrassing in a
-document someone else re-runs.
-
----
-
-## Four sentences to keep
-
-An interval crossing zero means *not shown*, not *no effect*.
-
-Read the width before the midpoint.
-
-Count how many comparisons you ran, and say the number.
-
-A confirming rerun beats any amount of arguing about the first one.
+because the resampling is random.
 
 ---
 
 ## Related
 
 - [01-standard-error.md](01-standard-error.md) — why the intervals are this wide
-- [02-paired-comparison.md](02-paired-comparison.md) — reducing the variance first
-- [interval_simulation.py](interval_simulation.py) — the evidence above
+- [02-paired-comparison.md](02-paired-comparison.md) — narrowing them first
+- [interval_simulation.py](interval_simulation.py) — the figures above
