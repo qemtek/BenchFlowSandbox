@@ -6,11 +6,14 @@ trusted, reproduced, or compared against a later run.
 
 Ordered by what hurts first, not by effort.
 
-The baseline this measures against: commit `e3f1b45` records git state, three
-content digests, the vendored tau2 commit, the pinned agent harness, the host
-interpreter and its dependency lock, plus BenchFlow and Docker versions. That
-covers the **inputs**. The gaps below are mostly about **outputs**, the **judge**,
-and **enforcement**.
+The baseline this measures against: a run records git state, four content
+digests (`tasks`, `environment`, `knowledge`, `prompts`), the vendored tau2
+commit, the pinned agent harness, the host interpreter and its dependency lock,
+plus BenchFlow and Docker versions. That covers the **inputs**. The gaps below
+are mostly about **outputs**, the **judge**, and **enforcement**.
+
+Status as of 2026-09-17: five of the seven are closed. What remains is one
+deferred decision, one process convention, and the variance measurement.
 
 ---
 
@@ -237,6 +240,11 @@ versioning buys. Until the same commit is run several times and the spread is
 known, no comparison between two runs can be called a real difference. This
 belongs to experimental design and should be done before any scored CI gate sets
 a threshold.
+
+Part of the work is already available: `benchflow eval compare-lift` pairs
+rollouts by task and reports deltas with bootstrap confidence intervals, which
+cancels task difficulty — most of the variance — without any repeats. Repeats
+are still needed for the residual noise floor, but the pairing is free.
 
 ---
 
