@@ -71,14 +71,20 @@ SE(difference) = √( SE₁² + SE₂² )
 
 At 48 tasks with both arms near 50%, that is 10.2 percentage points.
 
-To call a difference real you need it to clear roughly 2.8 standard errors,
-which is the margin at which a result is unlikely to be chance. So an effect has
-to reach about **29 percentage points**, or fourteen tasks flipping, before this
-comparison would reliably detect it.
+To call a difference real you need it to clear roughly 2.8 standard errors. So
+an effect has to reach about **29 percentage points**, or fourteen tasks
+flipping, before this comparison would reliably detect it.
 
 That figure belongs to those conditions only. It falls with more tasks and with
 pass rates further from 50%, by the same formula above, so recompute it for the
 set you are running.
+
+Two multipliers get used with standard errors and they answer different
+questions. Multiply by **1.96** for the half-width of a 95% interval: that is
+how wide the range around your result will be. Multiply by **2.8** for the
+smallest effect you could reliably detect: 1.96 to rule out chance, plus 0.84 so
+that a real effect of that size usually shows up rather than being missed half
+the time.
 
 Most of that cost is avoidable. Comparing the two arms task by task, instead of
 comparing their overall rates, removes the largest part of it. That is what

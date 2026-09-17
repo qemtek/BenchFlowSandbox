@@ -1,8 +1,12 @@
 # Confidence intervals
 
 When you compare two configurations, the result is a difference in pass rate
-plus a range around it: the confidence interval. The range says how much that
-difference would move if you ran the experiment again.
+plus a range around it. That range is the confidence interval, and it says how
+much the difference would move if you ran the experiment again.
+
+The convention is a 95% interval: the range is set wide enough that, if you
+repeated the whole experiment many times, 95% of the ranges produced would
+contain the true difference.
 
 This page covers how that range is calculated, and which conclusions it
 supports.
@@ -11,7 +15,25 @@ Figures come from `python docs/learnings/scripts/interval_simulation.py`.
 
 ---
 
-## How a bootstrap interval is built
+## Two ways to calculate one
+
+**From a formula.** Take the standard error and multiply it by 1.96, which gives
+the half-width of a 95% interval. [Page 01](01-standard-error.md) shows how the
+standard error is calculated.
+
+**By resampling your own results.** Simulate what would happen if you drew
+different task sets, using the results you already have, and read the range off
+those simulations. This is called **bootstrapping**.
+
+This project uses bootstrapping, for two reasons. A formula has to be chosen to
+match the statistic you are measuring, and the one for a paired comparison of
+pass/fail outcomes becomes unreliable when only a few tasks differ between the
+arms. Bootstrapping needs no formula and makes no assumption about the shape of
+the distribution.
+
+---
+
+## How bootstrapping works
 
 After pairing, each of the 48 tasks holds one of three outcomes. Suppose five
 improved, one regressed, and the rest agreed:
@@ -37,12 +59,8 @@ possible tasks. You cannot draw fresh samples from that larger set, because you
 do not have it. Drawing repeatedly from your 48 is the closest available
 substitute.
 
-The result is an answer to one question: **given the 48 tasks I happen to have,
-how much would this delta move if I had drawn a different 48?**
-
-A formula exists for this particular case, but it needs choosing correctly and
-its approximations get unreliable when few tasks differ. Resampling needs no
-derivation and no assumption about the shape of the distribution.
+The result answers one question: **given the 48 tasks I happen to have, how much
+would this delta move if I had drawn a different 48?**
 
 ---
 
