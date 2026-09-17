@@ -2,4 +2,24 @@
 name = "benchflowsandbox"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = []
+
+# Host-side tooling only. The container's dependencies are pinned separately in
+# each task's environment/Dockerfile, against a base image digest.
+#
+# This list is the intent; requirements-host.txt is the lock that provenance
+# digests and that the pre-push gate expects to be installed. Regenerate with:
+#   uv pip install --python .venv/bin/python -r pyproject.toml
+#   uv pip freeze --python .venv/bin/python > requirements-host.txt
+dependencies = [
+    # vendor/tau2 banking domain (no LLM stack — see vendor/SOURCE.txt)
+    "pydantic",
+    "deepdiff",
+    "addict",
+    "loguru",
+    "python-dotenv",
+    "toml",
+    "pyyaml",
+    "docstring-parser",
+    # experiment tracking; 3.16.0 wrote the existing mlflow.db (alembic b7e2c1a4d9f3)
+    "mlflow==3.16.0",
+]

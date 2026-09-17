@@ -1,50 +1,91 @@
 # Guide: changing the agent's tools
 
-> **Cost constraint: one task per run.**
-> The OpenRouter key has a small monthly cap and a banking task costs roughly
-> $0.15. Run a single task with `--tasks-dir tasks/<task-id>` and
-> `--concurrency 1`. A full 40-task arm is ~$6 and would exhaust the balance in
-> one command. Check `limit_remaining` at `https://openrouter.ai/api/v1/key`
-> before and after.
+The agent reaches the bank over MCP and nothing else. `vendor/bank_mcp.py` is
+the tool surface; each task's `task.md` declares it:
 
+```yaml
+sandbox:
+  mcp_servers:
+    - name: bank
+      transport: stdio
+      command: python
+      args: ['/opt/bank/vendor/bank_mcp.py']
+```
 
-The agent reaches the bank through one command, `bank`, defined in
-`vendor/bank_cli.py` and installed by each task's Dockerfile. Everything the
-agent can do to the bank goes through it, so that file is the tool surface.
+17 tools are advertised: the 14-tool core toolkit, plus three that reach the 44
+specialised operations.
 
 ```
-bank list                        every tool, with signature and summary
-bank show <tool>                 full JSON schema for one tool
-bank call <tool> '<json-args>'   invoke it
-bank hash                        current database hash
-bank --as user call <tool> ...   the customer's toolkit (dual-control tasks)
+bank_search              find an operation by describing what you want
+bank_describe_operation  read its signature: arguments, types, defaults
+bank_call_operation      run it
 ```
+
+`vendor/bank_cli.py` is still in the tree, but it is no longer an interface. It
+is the shared dispatcher `bank_mcp.py` imports for session state, autounlock and
+toolset filtering, and it is not on `PATH` inside the image.
+
+`docs/tools.md` is the generated inventory of all 64 tools with source
+locations. Regenerate it with `python tools/document_tools.py` after any change
+here.
 
 ---
 
-## A. Change which tools exist
+## A. Change which tools an arm exposes
 
-`_toolkit()` decides what the agent gets:
+`vendor/toolsets.py` is the switch. Nothing else needs editing:
 
 ```python
-def _toolkit(db: TransactionalDB, requestor: str):
-    tk = KnowledgeUserTools(db) if requestor == "user" else KnowledgeTools(db)
+TOOLSETS = {
+    "default":      None,
+    "no_discovery": {"exclude": {"unlock_discoverable_agent_tool", ...}},
+    "read_only":    {"include": {"get_current_time", ...}},
+}
 ```
 
-To withhold tools, filter what `get_tools()` returns or subclass
-`KnowledgeTools`. To add one, add a method decorated with `@is_tool` — the
-dispatcher is generic, so a new tool appears in `bank list` with no CLI changes.
+Select one per run — no rebuild, no regeneration:
 
-The current agent surface is 14 tools. `KnowledgeTools` has 72 methods; only
-the `@is_tool`-decorated ones are exposed.
+```bash
+python tools/run_experiment.py --tasks tasks \
+  --config-override '{"sandbox":{"env":{"BANK_TOOLSET":"no_discovery"}}}' \
+  --note "can it work without the discovery mechanism"
+```
+
+Add a toolset by adding a key. The filter wraps `get_tools()` and `has_tool()`,
+so a withheld tool disappears from `tools/list` as well as from dispatch — the
+agent cannot see it, not merely fail to call it.
+
+**This is the cheapest real tools experiment available here**, because the
+variable is declared in one file and recorded in the run config.
 
 ---
 
-## B. Change how the agent searches the knowledge base
+## B. Change what a tool does, or add one
 
-This is the most interesting lever, because tau2 ships it as a designed ladder.
-The 698 documents in `/data/documents` are where tool names are discovered, and
-how the agent can search them is a capability you control:
+Tool implementations live in `vendor/tau2/domains/banking_knowledge/tools.py`
+(agent) and `user_tools.py` (customer). A method decorated `@is_tool` is
+exposed; the other methods are internal.
+
+`bank_mcp.py` builds MCP definitions generically from each tool's
+`openai_schema`, so a new `@is_tool` method appears in `tools/list` with no
+changes to the server.
+
+To add a tool the bank does not have at all — say a document profiler — put it
+in `vendor/` and expose it as an MCP tool in `bank_mcp.py`'s `list_tools()` and
+`call_tool()`. Then mention it in `prompts/briefing.md`: an agent will not use a
+tool it has not been told about.
+
+**Tool changes need a rebuild.** `vendor/` is copied into the image at build
+time, so editing it has no effect until the image rebuilds. Prompt changes ride
+on `--config-override` and skills on `--skill-mode`; tool changes do not.
+
+---
+
+## C. Change how the agent searches the knowledge base
+
+tau2 ships this as a designed ladder. The 698 documents in `/data/documents` are
+where operations are discovered, and how the agent may search them is a
+capability you control:
 
 | Variant | Capability | Needs an API |
 |---|---|---|
@@ -53,109 +94,98 @@ how the agent can search them is a capability you control:
 | Shell | agentic shell search (current setup) | no |
 | KB-search | dense vector retrieval | yes — embeddings |
 
-Today the Dockerfile installs `ripgrep`, giving the shell variant:
+The Dockerfile installs `ripgrep`, giving the shell variant. Remove that line
+and the agent falls back to plain `grep`. Dense retrieval needs the retrieval
+chain vendored — `vendor/tau2/domains/banking_knowledge/__init__.py` stubs it
+out, and `KnowledgeToolsWithKBSearch` needs an embedding model.
 
-```dockerfile
-RUN apt-get install -y --no-install-recommends ripgrep jq
+Same tasks, same scoring, one variable.
+
+---
+
+## Testing a tool change
+
+**1. Rebuild is implicit, but the gate is not.**
+
+```bash
+python tools/check_oracles.py
 ```
 
-Remove that line and the agent falls back to plain `grep`. To add dense
-retrieval you must also vendor the retrieval chain — see
-`vendor/tau2/domains/banking_knowledge/__init__.py`, which currently stubs it
-out, and note that `KnowledgeToolsWithKBSearch` needs an embedding model
-(`text-embedding-3-large`, or `qwen3-embedding-8b` via OpenRouter).
+Runs every oracle through `bank_mcp.call_tool` — the exact entry point the
+server dispatches to — and finishes with one stdio JSON-RPC smoke test over the
+real wire protocol. Must print `48/48` and `smoke: stdio transport OK`.
 
-Same tasks, same scoring, one variable. That is the cleanest tools experiment
-available here.
+This is the check that matters most for tool work, because it exercises the tool
+layer 48 times without an LLM, for free, in about two minutes. The pre-push hook
+runs it too.
 
----
+**2. Inspect the surface directly.**
 
-## C. Change how tools present themselves
+```bash
+BANK_DB=/tmp/scratch.json python -c "
+import sys; sys.path.insert(0,'vendor')
+import bank_mcp
+print(bank_mcp.call_tool('bank_describe_operation', {'operation':'transfer_to_human_agents'}))"
+```
 
-The text of `bank list` and `bank show` is your code, and it measurably affects
-behaviour. In one run the agent burned several turns discovering that
-`call_discoverable_agent_tool` wants its `arguments` field as a JSON **string**,
-not a nested object. Better examples in `cmd_show` would have saved them.
+Faster than a rollout for checking that a tool presents itself the way you
+intended.
 
-This counts as a tools intervention and is worth testing as one.
-
----
-
-## Adding a genuinely new tool
-
-To give the agent a capability the bank does not have — say a document
-profiler:
-
-1. Write the script, e.g. `vendor/kb_profile.py`
-2. Install it in the Dockerfile:
-   ```dockerfile
-   RUN printf '#!/bin/sh\nexec python /opt/bank/vendor/kb_profile.py "$@"\n' \
-       > /usr/local/bin/kb-profile && chmod +x /usr/local/bin/kb-profile
-   ```
-3. Mention it in the prompt — an agent will not discover an undocumented binary
-4. Regenerate and rebuild
+**3. Then measure.** Separate `--jobs-dir` per arm, then `compare-lift`. See
+`docs/01-prompts.md` for the pairing argument.
 
 ---
 
-## Important: tool changes need a rebuild
+## Two rules learned the hard way
 
-`vendor/` is copied into the image at build time, so editing `bank_cli.py` has
-no effect until the image is rebuilt. Prompt and skill changes can ride on
-`--config-override` and `--skill-mode`; tool changes cannot.
+### If the schema declares it, the agent should be able to see it
 
-Use a fresh `--jobs-dir` for the new arm so BenchFlow doesn't resume the old
-rollouts and skip the work.
+Three separate bugs came from the same instinct — one generic code path over all
+64 tools instead of surfacing what each tool declares.
 
----
-
-## A caution learned the hard way
-
-Some toolkit state lives on the **object**, not in the database. Upstream keeps
-one toolkit alive for a whole conversation; our CLI starts a new process per
-command. When `unlock_discoverable_agent_tool` marked a tool unlocked in
-`self._agent_discoverable_tools_state`, the next `bank call` had forgotten it,
-and a correct agent scored 0 after 44 tool calls.
-
-`bank_cli.py` now persists that state to `db.session.json` beside the database.
-**If you add a tool that keeps state outside the DB, persist it the same way** —
-otherwise the agent hits a wall that looks like its own failure.
-
-
----
-
-## Lesson: a generic tool interface hides what the agent needs
-
-Three separate bugs here came from the same instinct — writing one generic code
-path over all 58 tools instead of surfacing what each tool actually declares.
-
-**1. Nested JSON arguments.** `bank call` took a raw JSON blob, so calling a
+**Nested JSON arguments.** The old CLI took a raw JSON blob, so calling a
 discovered operation meant a JSON string inside a JSON object inside shell
-quotes. An agent spent several turns getting the escaping right. Fixed by
-generating flags from each tool's schema.
+quoting. An agent spent several turns getting the escaping right. MCP takes an
+object, which is the whole reason it replaced the CLI.
 
-**2. Toolkit state lost between processes.** `unlock_discoverable_agent_tool`
-marked a tool unlocked in memory; the next `bank` process had forgotten. A
-correct agent scored 0 after 44 tool calls. Fixed by persisting to
-`<db>.session.json`, then removed entirely by unlocking on demand.
+**Enums discarded.** The flag builder read only `type` from each property,
+dropping `description`, `default` and `enum`. `transfer_to_human_agents` showed
+`--reason (string)` with no hint that only 19 codes scored. Agents called the
+right operation with a thoughtful summary and no reason code, and were marked
+wrong. Fixing it flipped task-004 and task-014 from FAIL to PASS.
 
-**3. Enums discarded from `--help`.** The flag builder read only `type` from
-each property, dropping `description`, `default` and `enum`. So
-`bank transfer-to-human-agents --help` showed `--reason (string)` with no hint
-that only 19 specific codes scored. Agents called the right operation with a
-thoughtful summary and no reason code, and were marked wrong.
+**Signatures invisible over MCP.** `bank_search` returned argument *names* only
+for the 44 discoverable operations. `bank_describe_operation` now returns the
+full signature.
 
-Measured effect of fixing #3 — same tasks, same agent, same model:
-
-```
-task-004   FAIL -> PASS
-task-014   FAIL -> PASS
-task-008   FAIL -> FAIL   (valid code chosen, but the wrong one)
-```
-
-What was deliberately NOT fixed: `compare_args` stays invisible, and the tool
+What was deliberately *not* fixed: `compare_args` stays invisible, and the tool
 description still says the reason codes live in the knowledge base. Finding the
 right code still requires reading the documentation — that is the capability
-under test. The fix only removed what was unguessable.
+under test. The fixes removed only what was unguessable.
 
-**Rule of thumb:** if the schema declares it, the agent should be able to see
-it. A generic dispatcher is cheap to write and expensive for the agent to use.
+### If a tool keeps state outside the database, persist it
+
+Some toolkit state lives on the object, not in the database. Upstream keeps one
+toolkit alive for a whole conversation. When `unlock_discoverable_agent_tool`
+marked a tool unlocked in `self._agent_discoverable_tools_state`, a later call
+had forgotten, and a correct agent scored 0 after 44 tool calls.
+
+State now persists to `db.session.json` beside the database, and unlocking
+happens on demand. Add a stateful tool and you must do the same, or the agent
+hits a wall that looks like its own failure.
+
+### A third, found on 2026-09-17
+
+Converting the oracle gate from the CLI to MCP immediately exposed that
+`bank_mcp.py` never wrote the tool-call log. All eight ACTION-scored tasks were
+unpassable over MCP and had been since the MCP server was written. A gate that
+tests an interface nobody ships cannot find this. If you add a code path the
+agent uses, make the gate use it too.
+
+---
+
+## Related
+
+- `docs/tools.md` — generated inventory of all 64 tools
+- `docs/01-prompts.md` — telling the agent about a tool
+- `docs/03-skills.md` — teaching it a procedure instead

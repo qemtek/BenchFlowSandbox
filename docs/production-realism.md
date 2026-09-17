@@ -1,7 +1,7 @@
 # Closing the gap to production
 
 What is still unrealistic about these tasks, ranked by realism gained against
-effort. Everything here holds the same constraint as `realism-roadmap.md`: task
+effort. Everything here holds the same constraint: task
 definitions, gold actions, the database and the scoring stay untouched unless a
 change is explicitly marked as creating a separate arm.
 

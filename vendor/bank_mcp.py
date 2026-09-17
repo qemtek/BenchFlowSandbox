@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MCP server exposing the bank's operations as structured tools.
 
-Phase 3 of docs/realism-roadmap.md. The CLI makes the agent compose JSON inside
+Structured tool calls: the agent gets real tool definitions instead of
+# composing JSON inside shell quoting. The CLI makes the agent compose JSON inside
 shell quoting:
 
     bank call call_discoverable_agent_tool '{"agent_tool_name":"x","arguments":"{\\"user_id\\": \\"1\\"}"}'

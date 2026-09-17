@@ -22,7 +22,7 @@ Select one for a run:
 
 ## Agent tools
 
-Directly callable with `bank call <tool> '<json>'`.
+Advertised in the MCP server's `tools/list` and callable directly.
 
 | tool | parameters | what it does | source |
 |---|---|---|---|
@@ -57,7 +57,7 @@ which are out of scope until a user simulator exists.
 
 ## Discoverable tools (44)
 
-Not listed by `bank list`. The agent must find the name in
+Not advertised in `tools/list`. The agent must find the name in
 `/data/documents`, call `unlock_discoverable_agent_tool`, then
 `call_discoverable_agent_tool`. **This mechanism is what the benchmark
 actually tests** — withholding it is the `no_discovery` arm.
