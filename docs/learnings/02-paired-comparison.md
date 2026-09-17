@@ -108,12 +108,9 @@ benchflow eval compare-lift \
   --bootstrap-seed 42
 ```
 
-The bootstrap resamples the 48 paired results with replacement, 1,000 times,
-recomputing the delta each time, and reports the 2.5th and 97.5th percentiles.
-It answers: given the task set I happen to have, how much would this delta move
-if I had drawn a different 48?
-
-Pass `--bootstrap-seed` if you intend to cite the interval, so it reproduces.
+The interval around the delta comes from resampling those 48 paired outcomes,
+which is the subject of [the next page](03-bootstrapping.md) — including why
+`--bootstrap-seed` matters if you intend to quote the result.
 
 ---
 

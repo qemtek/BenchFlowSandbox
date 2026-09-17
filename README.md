@@ -408,7 +408,7 @@ in production. See [versioning-gaps](docs/versioning-gaps.md).
 ## Where to go next
 
 - **[docs/learnings/](docs/learnings/)** — how to tell a result from a
-  coincidence: standard error, paired comparison
+  coincidence: standard error, paired comparison, bootstrapping
 - **[docs/01-prompts.md](docs/01-prompts.md)** — three levels of prompt change
 - **[docs/02-tools.md](docs/02-tools.md)** — the MCP surface and toolsets
 - **[docs/03-skills.md](docs/03-skills.md)** — authoring and testing a skill

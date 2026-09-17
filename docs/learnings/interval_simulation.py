@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evidence for 03-reading-intervals.md. Not part of the rig.
+"""Evidence for 03-bootstrapping.md. Not part of the rig.
 
 Simulates paired comparisons on a 48-task set so the page's claims can be
 checked rather than taken on trust. Seeded, so the numbers in the page
@@ -36,6 +36,25 @@ def bootstrap_ci(improved: int, regressed: int) -> tuple[float, float]:
     return deltas[int(0.025 * BOOT)], deltas[int(0.975 * BOOT)]
 
 
+def resample_count_demo() -> None:
+    """What B buys you: steadier endpoints, not a narrower interval."""
+    import statistics
+    pool = [1] * 5 + [-1] * 1 + [0] * (N - 6)   # one fixed experiment
+
+    def ci(b):
+        d = sorted(sum(random.choice(pool) for _ in range(N)) / N
+                   for _ in range(b))
+        return d[int(0.025 * b)], d[int(0.975 * b)]
+
+    print("\nC. Same data, different resample counts (10 repeats each)")
+    for b in (100, 1000, 10000):
+        los, his = zip(*(ci(b) for _ in range(10)))
+        print(f"   B={b:<6} low {statistics.mean(los) * 100:+5.1f}pp "
+              f"(varies by {(max(los) - min(los)) * 100:.1f}) "
+              f"high {statistics.mean(his) * 100:+5.1f}pp "
+              f"(varies by {(max(his) - min(his)) * 100:.1f})")
+
+
 def main() -> None:
     random.seed(7)
 
@@ -61,6 +80,8 @@ def main() -> None:
     print("\nB. Real 10-point gain (12% improve, 2% regress)")
     print(f"   detected:                    {detected / RUNS:.0%} of runs")
     print(f"   reported as 'not shown':     {1 - detected / RUNS:.0%} of runs")
+
+    resample_count_demo()
 
 
 if __name__ == "__main__":
