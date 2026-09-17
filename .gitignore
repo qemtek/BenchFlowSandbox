@@ -2,8 +2,12 @@
 .env
 
 # Run outputs. Not reproducible from a commit — a rerun of a pinned commit
-# produces a different rollout — so these are evidence, not cache. MLflow
-# indexes them; there is no backup (docs/versioning-gaps.md §1).
+# produces a different rollout — so these are evidence, not cache.
+#
+# jobs/ is scratch: run_experiment.py archives the whole directory into the
+# MLflow run, so a tracked run survives deleting it. Untracked runs do not.
+# mlflow.db + mlartifacts/ are the durable store, and still unbacked-up
+# (docs/versioning-gaps.md §1).
 jobs/
 mlruns/
 

@@ -190,7 +190,14 @@ review_mean_raw_quality, review_publishable_rate
 ```
 
 **Artifacts:** `summary.json`, `results.jsonl` (full trajectories and the tool
-definitions the agent saw), `run.log`, `review_report.json`.
+definitions the agent saw), `run.log` and `review_report.json` as loose files
+for quick reading, plus **the entire job directory as a `.tar.gz`**.
+
+The archive matters. Those loose files are an index, not a record: they omit
+`config.json` (the resolved config that actually ran), `prompts.json` (what the
+agent was actually sent), the raw trajectories, and the verifier's own output.
+With the archive, `jobs/` is scratch — delete it and a tracked run is intact.
+Compression runs about 5x, so a 48-task run costs single-digit megabytes.
 
 ### Why digests as well as a commit
 
@@ -322,10 +329,10 @@ results as a signal to investigate.
 whichever snapshot is current, and BenchFlow does not record which. The weights
 behind a snapshot never change; the pointer can move.
 
-**There is no backup of the results.** `mlflow.db`, `mlartifacts/` and `jobs/`
-are local and gitignored. Deliberate for a test project — see
-[versioning-gaps](docs/versioning-gaps.md) — but the inputs are pinned far
-better than the outputs are kept.
+**There is no backup of the results.** `mlflow.db` and `mlartifacts/` are the
+durable store — `jobs/` is scratch — but both are local and gitignored.
+Deliberate for a test project, standing in for what would be a hosted database
+in production. See [versioning-gaps](docs/versioning-gaps.md).
 
 ---
 

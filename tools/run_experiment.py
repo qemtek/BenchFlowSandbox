@@ -26,6 +26,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import tarfile
 import time
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -280,14 +281,31 @@ def main() -> int:
             metrics["calls_per_gold_action"] = tool_calls / golds
         mlflow.log_metrics(metrics)
 
-        # Log every match, not just the first. A multi-task run writes one
-        # results.jsonl per task plus an aggregate; the old `break` kept
-        # whichever rglob happened to yield first and dropped the rest.
+        # Two levels of artifact, deliberately.
+        #
+        # Loose files first, so the common ones are one click away in the UI.
+        # Log every match rather than the first: a multi-task run writes one
+        # results.jsonl per task plus an aggregate, and an earlier `break` kept
+        # whichever rglob yielded first and dropped the rest.
         for artifact in ("summary.json", "results.jsonl", "run.log"):
-            for p in sorted(jobs_dir.rglob(artifact)):
-                rel = str(p.parent.relative_to(jobs_dir))
-                mlflow.log_artifact(str(p),
+            for f in sorted(jobs_dir.rglob(artifact)):
+                rel = str(f.parent.relative_to(jobs_dir))
+                mlflow.log_artifact(str(f),
                                     artifact_path=None if rel == "." else rel)
+
+        # Then the whole job directory as one archive. Those three files are an
+        # index, not a record: they omit config.json (the resolved config that
+        # actually ran), prompts.json (what the agent was actually sent), the
+        # raw trajectories, and the verifier's own output. Without the archive,
+        # deleting jobs/ loses exactly the evidence you want when a result
+        # surprises you.
+        archive = jobs_dir.parent / f"{jobs_dir.name}.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(jobs_dir, arcname=jobs_dir.name)
+        mlflow.log_artifact(str(archive))
+        size_mb = archive.stat().st_size / 1e6
+        archive.unlink()
+        print(f"  archived job dir: {size_mb:.1f} MB compressed")
 
         if args.review:
             rubric = pathlib.Path(args.review_rubric) if args.review_rubric else next(
