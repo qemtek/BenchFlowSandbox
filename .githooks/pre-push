@@ -17,8 +17,25 @@ set -e
 REPO="$(git rev-parse --show-toplevel)"
 cd "$REPO"
 
+# Git runs hooks with a minimal environment and no virtualenv activated, so
+# `python` is usually not on PATH here even when it is in your shell. Resolve
+# the interpreter explicitly, preferring the repo venv that requirements-host.txt
+# describes.
+if [ -x "$REPO/.venv/bin/python" ]; then
+  PY="$REPO/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  PY="$(command -v python)"
+else
+  printf 'pre-push: no Python interpreter found.\n'
+  printf 'Create the environment with:\n'
+  printf '  uv venv && uv pip install --python .venv/bin/python -r requirements-host.txt\n'
+  exit 1
+fi
+
 printf 'pre-push: checking every task is solvable via the agent interface...\n'
-OUT="$(python tools/check_oracles.py 2>&1)" || true
+OUT="$("$PY" tools/check_oracles.py 2>&1)" || true
 LINE="$(printf '%s\n' "$OUT" | grep 'tasks are solvable' || true)"
 
 case "$LINE" in
