@@ -74,6 +74,7 @@ def _call_discovered_tool() -> dict:
         "name": "bank_call_operation",
         "description": (
             "Run one of the specialised operations found with bank_search. "
+            "Check bank_describe_operation first for its arguments. "
             "Arguments are passed as a plain object, not a string."
         ),
         "inputSchema": {
@@ -90,8 +91,87 @@ def _call_discovered_tool() -> dict:
     }
 
 
+def _describe_tool() -> dict:
+    return {
+        "name": "bank_describe_operation",
+        "description": (
+            "Show the full signature of an operation found with bank_search: "
+            "its documentation, every argument with its type, which arguments "
+            "are required, and any defaults. Call this before "
+            "bank_call_operation — search returns names, not signatures."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "description": "Operation name"}
+            },
+            "required": ["operation"],
+        },
+    }
+
+
+def _type_name(ann) -> str:
+    """Readable name for a signature annotation."""
+    return getattr(ann, "__name__", None) or str(ann).replace("typing.", "")
+
+
+def _run_describe(operation: str) -> str:
+    """Mirror `bank <operation> --help` over MCP.
+
+    The 14 core tools ship an ``openai_schema``, so their MCP ``inputSchema``
+    already carries descriptions, enums and defaults. The 44 discoverable
+    operations do not: their shape lives in the Python signature, which
+    ``bank_search`` reduced to a list of argument names. The CLI exposed the
+    rest through ``--help``; without an equivalent here the MCP agent was
+    working blind on exactly the operations the benchmark is about.
+    """
+    tk = bank_cli._toolkit(bank_cli._load(), "assistant")
+    spec = bank_cli._spec_for(tk, operation)
+    if spec is None:
+        return (f"No operation named {operation!r}. "
+                "Use bank_search to find one.")
+    kind, params, required, doc = spec
+    lines = [f"{operation}", ""]
+    if doc:
+        lines += [doc.strip(), ""]
+    if not params:
+        lines.append("Takes no arguments.")
+        return "\n".join(lines)
+
+    lines.append("Arguments:")
+    if kind == "core":
+        # params is a JSON-schema properties block.
+        for name, pschema in params.items():
+            bits = [pschema.get("type", "string")]
+            if name in required:
+                bits.append("required")
+            if pschema.get("default") is not None:
+                bits.append(f"default: {pschema['default']}")
+            if pschema.get("enum"):
+                bits.append("one of: " + ", ".join(map(str, pschema["enum"])))
+            lines.append(f"  {name} ({'; '.join(bits)})")
+            if pschema.get("description"):
+                lines.append(f"      {pschema['description']}")
+    else:
+        # params maps argument name -> signature annotation.
+        import inspect
+        sig = inspect.signature(
+            getattr(tk, "_tk", tk).get_discoverable_tools()[operation])
+        for name, ann in params.items():
+            bits = [_type_name(ann)]
+            if name in required:
+                bits.append("required")
+            else:
+                dflt = sig.parameters[name].default
+                if dflt is not inspect._empty:
+                    bits.append(f"default: {dflt!r}")
+            lines.append(f"  {name} ({'; '.join(bits)})")
+    return "\n".join(lines)
+
+
 def list_tools() -> list[dict]:
-    return _core_tools() + [_search_tool(), _call_discovered_tool()]
+    return _core_tools() + [_search_tool(), _describe_tool(),
+                            _call_discovered_tool()]
 
 
 def _run_search(query: str) -> str:
@@ -133,6 +213,9 @@ def call_tool(name: str, arguments: dict) -> str:
 
     if name == "bank_search":
         return _run_search(arguments.get("query", ""))
+
+    if name == "bank_describe_operation":
+        return _run_describe(arguments.get("operation", ""))
 
     if name == "bank_call_operation":
         # The whole point of the MCP surface: take arguments as an object and do
