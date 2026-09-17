@@ -35,32 +35,42 @@ the distribution.
 
 ## How bootstrapping works
 
-After pairing, each of the 48 tasks holds one of three outcomes. Suppose five
-improved, one regressed, and the rest agreed:
+The uncertainty you are trying to measure comes from which tasks you happened to
+run. So tasks are what you resample.
+
+Each task contributes one number to the comparison:
 
 ```
-+1   improved      5 tasks
--1   regressed     1 task
- 0   agreed       42 tasks
++1   the treatment passed it, the baseline did not
+-1   the baseline passed it, the treatment did not
+ 0   both passed it, or both failed it
 ```
 
-Those 48 values are the whole input. The procedure:
+The average of those 48 numbers is the difference in pass rates. They are two
+descriptions of one quantity. If the treatment won 5 tasks the baseline lost,
+lost 1 the baseline won, and the two agreed on the other 42:
 
-1. Draw 48 outcomes from that set, with replacement. Some tasks get picked
+```
+average of the 48 numbers    (5 − 1) / 48     = 8.3pp
+difference in pass rates     33/48 − 29/48    = 8.3pp
+```
+
+So resampling tasks is resampling the pass-rate difference. The procedure:
+
+1. Draw 48 tasks at random from your 48, with replacement. Some get picked
    twice, some not at all.
-2. Compute the delta for that draw.
-3. Repeat 1,000 times, then take the 2.5th and 97.5th percentiles of the 1,000
-   deltas.
+2. Average their numbers. That is one simulated difference in pass rates.
+3. Repeat 1,000 times.
+4. Take the 2.5th and 97.5th percentiles of the 1,000 simulated differences.
 
 That range is the interval.
 
-The reasoning: your 48 tasks are a sample drawn from a much larger set of
-possible tasks. You cannot draw fresh samples from that larger set, because you
-do not have it. Drawing repeatedly from your 48 is the closest available
-substitute.
+Each draw stands in for "a different set of 48 tasks". You cannot draw fresh
+task sets from the real world, because you do not have it, so drawing from the
+48 you have is the closest available substitute.
 
 The result answers one question: **given the 48 tasks I happen to have, how much
-would this delta move if I had drawn a different 48?**
+would this difference move if I had drawn a different 48?**
 
 ---
 
