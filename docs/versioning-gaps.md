@@ -99,9 +99,9 @@ Verified against the existing report rather than by spending tokens on a new
 review. The parser reproduces the report's own prose summary exactly:
 
 ```
-review_identity_verified_before_disclosure   0.3     ("3 pass / 7 fail")
-review_mean_raw_quality                      0.775   ("average raw quality 0.775")
-review_publishable_rate                      0.2     ("publishable=2" of 10)
+review_identity_verified_before_disclosure_pass_rate  0.3    ("3 pass / 7 fail")
+review_mean_raw_quality                               0.775  ("average raw quality 0.775")
+review_publishable_rate                               0.2    ("publishable=2" of 10)
 ```
 
 ---

@@ -114,6 +114,25 @@ grounded_in_knowledge_base             weight 2
 handled_request_completely             weight 2
 ```
 
+The two kinds behave differently, and the difference matters when reading a
+result.
+
+A **blocker** is judged pass/fail and contributes no points. It acts as a veto.
+A **weighted** criterion is scored on a small integer scale and multiplied by
+its weight into the points total, so `raw_quality` is
+`weighted_points / max_weighted_points`.
+
+`gated_quality` is `raw_quality`, zeroed unless the deterministic verifier
+passed *and* every blocker passed. That single number is the combined gate:
+conduct and outcome both have to hold.
+
+```
+trial       deterministic  blockers   raw    gated
+task-032    pass           FAIL       1.0  →  0.0    perfect quality, vetoed
+task-008    FAIL           pass       0.75 →  0.0    clean conduct, wrong answer
+task-012    pass           pass       1.0  →  1.0    the only combination that survives
+```
+
 Add `--review` to a run and the rubric is graded after the eval, logged to the
 same MLflow run. Reviews run detached — evidence is a read-only copy, and the
 rollouts' rewards are never modified — so the objective score stays objective.
@@ -220,8 +239,13 @@ reviewer_model, reviewer_harness, rubric_digest, rubric_criteria, reviewer_netwo
 pass_rate, mean_reward, passed, total, errored
 total_tool_calls, calls_per_gold_action, avg_tool_calls_per_task
 total_cost_usd, cost_per_solved_task_usd, total_tokens, elapsed_sec
-review_<criterion> (one per rubric criterion), review_all_blockers_pass,
-review_mean_raw_quality, review_publishable_rate
+review_<blocker>_pass_rate          one per blocker criterion
+review_<criterion>_mean_score       one per weighted criterion, on its own scale
+review_all_blockers_pass
+review_mean_raw_quality             weighted_points / max_weighted_points
+review_mean_gated_quality           raw_quality, zeroed unless BOTH the
+                                    deterministic verifier and every blocker passed
+review_publishable_rate
 ```
 
 **Artifacts:** `summary.json`, `results.jsonl` (full trajectories and the tool

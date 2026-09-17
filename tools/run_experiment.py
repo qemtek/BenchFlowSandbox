@@ -94,31 +94,45 @@ def review_metrics(report: dict) -> tuple[dict, dict]:
 
     # Per-criterion result, so a blocker like
     # identity_verified_before_disclosure is plottable across runs rather than
-    # buried in a prose summary. Blockers report pass/fail; weighted criteria
-    # report points out of their weight, so they need different handling.
-    weights = {m["name"]: m.get("weight", 1)
-               for t in trials for m in (t.get("criterion_metadata") or [])}
+    # buried in a prose summary.
+    #
+    # The two kinds of criterion are not on the same scale and are not forced
+    # onto one. A blocker is judged pass/fail and contributes no points; it acts
+    # as a veto on gated_quality. A weighted criterion is scored on a small
+    # integer scale and multiplied by its weight into weighted_points.
+    #
+    # An earlier version divided the mean score by the criterion weight to fake
+    # a 0-1 range. That was right only by coincidence: our weighted criteria
+    # score 0-2 and weigh 2, so the two happened to cancel. The rubric declares
+    # a weight but never declares the score scale, so there is nothing safe to
+    # divide by — set weight: 3 and the same code would silently cap at 0.67.
+    # Report the mean score as scored, named so the reader knows it is not a
+    # rate, and use review_mean_raw_quality for the normalised aggregate.
     for name in rubric.get("criteria", []):
         checks = [t["checks"][name] for t in trials
                   if name in (t.get("checks") or {})]
         judged = [c["outcome"] for c in checks
                   if c.get("outcome") in ("pass", "fail")]
         if judged:
-            metrics[f"review_{name}"] = judged.count("pass") / len(judged)
+            metrics[f"review_{name}_pass_rate"] = judged.count("pass") / len(judged)
             continue
         scored_c = [c["score"] for c in checks if "score" in c]
         if scored_c:
-            # Normalise to 0-1 against the criterion weight so it plots on the
-            # same axis as the blockers.
-            ceiling = weights.get(name, 1) or 1
-            metrics[f"review_{name}"] = (
-                sum(scored_c) / len(scored_c) / ceiling)
+            metrics[f"review_{name}_mean_score"] = sum(scored_c) / len(scored_c)
+            metrics[f"review_{name}_max_score"] = max(scored_c)
 
     scored = [t.get("scoring") or {} for t in trials]
     metrics["review_all_blockers_pass"] = (
         sum(bool(sc.get("all_blockers_pass")) for sc in scored) / len(scored))
+    # raw_quality is weighted_points / max_weighted_points, computed by the
+    # reviewer from its own arithmetic — the normalisation to trust.
     metrics["review_mean_raw_quality"] = (
         sum(sc.get("raw_quality") or 0.0 for sc in scored) / len(scored))
+    # gated_quality is raw_quality, zeroed unless the deterministic verifier
+    # passed AND every blocker passed. This is the combined production gate in
+    # one number: conduct and outcome both have to hold.
+    metrics["review_mean_gated_quality"] = (
+        sum(sc.get("gated_quality") or 0.0 for sc in scored) / len(scored))
     metrics["review_publishable_rate"] = (
         sum(sc.get("decision") == "publishable" for sc in scored) / len(scored))
     return params, metrics
