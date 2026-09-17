@@ -7,11 +7,17 @@ rather than the whole world.
 Standard error is how far apart those numbers are expected to be. It sets the
 size of the smallest difference you can distinguish from noise.
 
-Two terms used throughout these pages. An **arm** is one complete configuration
-(prompt, toolset, skill mode, model, harness) run over the task set. A
-**percentage point** (`pp`) is an absolute gap between two percentages: 56% to
-62% is a rise of 6 percentage points, though a rise of 11% in relative terms. On
-a 48-task set, one task is 2.1pp.
+Two terms are used throughout these pages.
+
+An **arm** is one complete configuration (prompt, toolset, skill mode, model,
+harness) run over the task set.
+
+A **percentage point** (`pp`) is an absolute gap between two percentages. A move
+from 56% to 62% is a rise of 6 percentage points, and a rise of 11% in relative
+terms; everything here uses the absolute version. Percentage points are the
+convenient unit because they convert directly into tasks: on a 48-task set, one
+task changing from fail to pass moves the pass rate by 1/48, which is 2.1
+percentage points.
 
 ---
 
@@ -101,8 +107,9 @@ spread, which has not been done here yet.
 hoping for is smaller than the smallest you could detect, the experiment cannot
 answer the question, and that is worth knowing in advance.
 
-**Treat one or two flipped tasks as noise.** At 48 tasks that is 2 to 4
-percentage points, well inside the floor.
+**Treat one or two changed tasks as noise.** One task moves a 48-task pass rate
+by 2.1 points and two move it by 4.2, both well inside a 7-point standard
+error.
 
 ---
 

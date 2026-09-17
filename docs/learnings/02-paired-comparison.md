@@ -40,13 +40,13 @@ unpaired   compare the two overall pass rates
 paired     compute the difference on each task, then average those
 ```
 
-Both give the same answer. On 48 tasks where the treatment passed four more, the
-delta is 8.3 percentage points either way.
+Both give the same answer. If the treatment passed four more of the 48 tasks,
+the delta is 4/48 either way, or 8.3 percentage points.
 
 What differs is the uncertainty around it. Comparing overall pass rates treats
-the two arms as unrelated, so every task's difficulty counts as noise
-twice, once in each arm's rate. Comparing task by task cancels it: a task's difficulty
-sits in both terms of its own subtraction.
+the two arms as unrelated, so every task's difficulty counts as noise twice,
+once in each arm's rate. Comparing task by task cancels it, because a task's
+difficulty sits in both terms of its own subtraction.
 
 ```
 same runs, compared task by task       standard error  3.67pp
