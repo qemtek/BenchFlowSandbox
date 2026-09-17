@@ -81,26 +81,48 @@ not remove the need for repeats.
 
 ## How much it buys
 
-On a 48-task set, the paired error depends on how many tasks the two arms
-disagree on:
+The two methods are limited by different quantities, so they are worth looking
+at separately. Both tables are for 48 tasks, and the detectable effect is
+roughly 2.8 standard errors, the margin at which a result is unlikely to be
+chance.
+
+**Paired.** Precision depends on how many tasks the two arms disagree on, and
+not at all on the pass rate:
 
 ```
-tasks that differ     standard error    smallest detectable effect
-  4 of 48                 4.6pp                  13pp
-  9 of 48                 6.5pp                  18pp
- 14 of 48                 7.9pp                  22pp
-
- compared by rate         9.9pp                  28pp
+tasks that differ    standard error    detectable effect
+  2 of 48   ( 4%)         2.9pp              8pp
+  4 of 48   ( 8%)         4.2pp             12pp
+  9 of 48   (19%)         6.2pp             18pp
+ 14 of 48   (29%)         7.8pp             22pp
+ 24 of 48   (50%)        10.2pp             29pp
 ```
 
-The right-hand column is roughly 2.8 times the standard error, the margin needed
-before a result is unlikely to be chance.
-
-A consistent effect on a few tasks is easier to separate from chance than a
+A consistent effect on a few tasks separates from chance more easily than a
 scattered one, so fewer disagreements works in your favour.
 
-These figures assume 48 tasks and pass rates near 50%. Both columns shrink with
-more tasks and with rates further from 50%; recompute rather than reusing them.
+**Compared by overall rate.** Precision depends on where the pass rates sit, and
+not at all on how much the arms agree:
+
+```
+both arms at         standard error    detectable effect
+   50%                   10.2pp             29pp
+   70%                    9.4pp             26pp
+   90%                    6.1pp             17pp
+```
+
+Set them side by side at a 50% pass rate. Comparing by rate needs a 29-point
+effect. Paired, the same experiment needs 12 points if the arms disagree on four
+tasks, or 18 if they disagree on nine.
+
+The bottom row of the first table is the break-even point: once the arms
+disagree on half the tasks, pairing buys nothing. That case means the change is
+moving tasks in both directions more or less at random, which is a finding in
+itself.
+
+Both tables assume 48 tasks. Every figure shrinks with more tasks, by the
+`√n` in [01-standard-error](01-standard-error.md), so recompute for the set you
+are running.
 
 ---
 
