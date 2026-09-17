@@ -1,0 +1,34 @@
+#!/bin/sh
+# Gate: refuse to push a commit whose tasks are not solvable.
+#
+# Installed with:  git config core.hooksPath .githooks
+#
+# On 2026-09-17 the oracle check went 48/48 to 0/48 and nothing noticed, because
+# nothing ran it. An empty .venv shadowed an ephemeral uv environment and
+# vendor/tau2 stopped importing. No digest moved, because no tracked content
+# changed. Discipline did not catch it; a gate would have.
+#
+# Pre-push rather than pre-commit: the check takes about two minutes, which is
+# too slow to sit in front of every commit.
+#
+# Override for a genuine emergency:  git push --no-verify
+
+set -e
+REPO="$(git rev-parse --show-toplevel)"
+cd "$REPO"
+
+printf 'pre-push: checking every task is solvable via the agent interface...\n'
+OUT="$(python tools/check_oracles.py 2>&1)" || true
+LINE="$(printf '%s\n' "$OUT" | grep 'tasks are solvable' || true)"
+
+case "$LINE" in
+  48/48*) printf 'pre-push: %s\n' "$LINE" ;;
+  *)
+    printf 'pre-push: FAILED\n\n'
+    printf '%s\n' "$OUT" | tail -20
+    printf '\nPush blocked. Fix the tasks or the host environment '
+    printf '(uv pip install --python .venv/bin/python -r requirements-host.txt),\n'
+    printf 'or push with --no-verify if you know what you are doing.\n'
+    exit 1
+    ;;
+esac

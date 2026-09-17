@@ -14,7 +14,7 @@ and **enforcement**.
 
 ---
 
-## 1. The results store is neither versioned nor backed up
+## 1. The results store is neither versioned nor backed up  — DEFERRED
 
 Our `.gitignore`:
 
@@ -33,18 +33,22 @@ digests". That is false for anything involving a model: re-running a pinned
 commit produces a different rollout. We have the counterexample already, a task
 that scored 1.00 and then 0.0 on identical inputs.
 
-**Done looks like:** the tracking store survives the loss of this working copy.
-Either a remote MLflow tracking server with a SQL backend, or a scheduled export
-of `mlflow.db` plus `mlartifacts/` to somewhere durable. A remote server is the
-documented path and also unblocks MLflow's evaluation-dataset features, which
-[require a SQL-backed tracking server](https://mlflow.org/docs/latest/genai/datasets/)
-and do not work on the file store at all.
+**Decided 2026-09-17:** no remote tracking server. This is a test project, and
+a local SQLite store stands in for what would be a hosted database in
+production. The local store already satisfies MLflow's
+[SQL-backend requirement](https://mlflow.org/docs/latest/genai/datasets/) —
+SQLite counts, and the file store does not — so nothing is blocked by staying
+local.
 
-**Effort:** small for a backup script. Medium for a remote server.
+What remains is a backup, so a lost working copy does not take the results with
+it. Out of scope for now; revisit if results start informing decisions that
+outlive the experiment.
+
+**Effort:** small, deferred.
 
 ---
 
-## 2. The LLM judge sits outside the tracking system
+## 2. The LLM judge sat outside the tracking system  — DONE
 
 You asked for the deterministic check and the LLM judge to run as one production
 gate. Only the deterministic half has provenance.
@@ -82,11 +86,24 @@ blocker, and it should travel with the result rather than living in a doc.
   is plottable across runs.
 - `review_report.json` is logged as an artifact.
 
-**Effort:** small.
+**Done:** `run_experiment.py --review` runs the rubric after the eval and logs
+to the same MLflow run. Judge model, judge harness pin, rubric digest, rubric
+path, criteria list and network mode are params. Per-criterion results are
+metrics, with blockers as pass rates and weighted criteria normalised against
+their weight so everything plots on one axis.
+
+Verified against the existing report rather than by spending tokens on a new
+review. The parser reproduces the report's own prose summary exactly:
+
+```
+review_identity_verified_before_disclosure   0.3     ("3 pass / 7 fail")
+review_mean_raw_quality                      0.775   ("average raw quality 0.775")
+review_publishable_rate                      0.2     ("publishable=2" of 10)
+```
 
 ---
 
-## 3. Sampling parameters are recorded nowhere
+## 3. Generation settings were recorded nowhere  — DONE
 
 Checked against a full rollout record in `results.jsonl`:
 
@@ -94,26 +111,32 @@ Checked against a full rollout record in `results.jsonl`:
 temperature: ABSENT    top_p: ABSENT    seed: ABSENT    max_tokens: ABSENT
 ```
 
+The reason turned out to matter more than the absence. BenchFlow's ACP runtime
+(`benchflow/acp/runtime.py`) sets no sampling parameters at all. The
+`BENCHFLOW_MODEL_TEMPERATURE` / `_TOP_P` / `_MAX_TOKENS` variables exist, but
+only the `deepagents` and `openclaw` shims read them. For `claude-agent-acp`
+there is no path to set them, so they are whatever Claude Code's bundled SDK
+defaults to — fixed by the harness pin we now record, and not otherwise
+controllable from here.
+
+What *is* controllable is `--reasoning-effort`, a real `benchflow eval run`
+flag that we never passed. Left unset it takes an unrecorded default, and
+reasoning effort moves both behaviour and cost.
+
 I could not find a 2026 source that names sampling parameters as a required
-disclosure, so take this as our own reasoning rather than received practice:
-temperature and top_p change the output distribution, and a run recorded without
-them cannot be distinguished from a run that used different ones. That is the
-same argument we already accepted for the harness pin.
+disclosure, so treat the argument as ours rather than received practice: an
+input that changes the output distribution and is not recorded cannot be
+distinguished from a different value of that input. Same reasoning we already
+accepted for the harness pin.
 
-BenchFlow does not appear to surface them in its output, so we likely have to
-set them explicitly via `--config-override` and log what we set, rather than
-reading back what was used. That is weaker, because an unset default can still
-change under us, but it is better than nothing.
-
-**Done looks like:** sampling parameters are explicit in the run config and
-logged as MLflow params. If BenchFlow cannot pin them, that limit is written
-down rather than assumed away.
-
-**Effort:** small, plus an unknown on what BenchFlow exposes.
+**Done:** `run_experiment.py` takes `--reasoning-effort` and logs it. Runs that
+leave it unset record `harness-default` rather than nothing. `sampling_params`
+records that the ACP runtime does not expose them, so the limit is written down
+instead of looking like an oversight.
 
 ---
 
-## 4. Task definitions have no digest of their own
+## 4. Task definitions had no digest of their own  — DONE
 
 `TRACKED` in `tools/provenance.py` covers `vendor/`, `data/banking_knowledge/`
 and `prompts/`. It does not cover `tasks/`.
@@ -129,14 +152,20 @@ Current practice treats the dataset like prompts:
 *"tag releases, freeze datasets for active CI gates, and review additions in
 PR"* ([2026 LLM Evaluation Playbook](https://futureagi.com/blog/llm-evaluation-playbook-2026/)).
 
-**Done looks like:** a fourth digest over `tasks/`, logged as a param, and a git
-tag marking the frozen set that any CI gate runs against.
+**Done:** `TRACKED` gains `tasks` (384 files across 48 packages), logged as
+`digest_tasks`. `digest_dir` now matches extensionless files by name so
+`environment/Dockerfile` is covered.
 
-**Effort:** small for the digest. The tagging convention is a process decision.
+Adding a digest changes `combined` for unchanged content, so `collect()` now
+reports `provenance_version` (currently 2). Runs either side of a schema change
+are distinguishable rather than falsely different.
+
+**Still open:** tagging frozen task sets is a process decision, not code. Worth
+doing before any scored gate sets a threshold.
 
 ---
 
-## 5. No CI gate
+## 5. No CI gate  — DONE
 
 The oracle check went 48/48 to 0/48 and nothing noticed until it was run by
 hand. The cause was an empty `.venv` shadowing an ephemeral `uv` environment, so
@@ -149,20 +178,25 @@ describes the mechanism plainly: *"A failing assertion fails the pytest job,
 which fails the check, which blocks the pull request, exactly like a unit
 test."*
 
-**Done looks like:**
-- `python tools/check_oracles.py` runs on every push and fails the build below
-  48/48.
-- The host environment is built from `requirements-host.txt`, so CI catches
-  dependency drift the same way it just caught us.
-- Later: a small frozen task subset run as a scored regression gate, with a
-  threshold that blocks a merge.
+This repo has no remote and no CI service, so the gate is a git hook:
+`.githooks/pre-push` runs `check_oracles.py` and blocks the push below 48/48.
+Enabled with `git config core.hooksPath .githooks`, which is already set.
 
-**Effort:** small for the oracle gate. Medium for a scored gate, because it needs
-the variance work below to set an honest threshold.
+Pre-push rather than pre-commit, because the check takes about two minutes.
+`git push --no-verify` overrides it.
+
+**Still open:** a hook runs in the same environment it is checking, so it cannot
+catch "works on my machine only". A hosted runner building from
+`requirements-host.txt` catches that class, and becomes available the moment
+this repo gets a remote.
+
+**Also still open:** a *scored* gate — running a frozen task subset and blocking
+below a pass-rate threshold — needs run-to-run variance measured first, or the
+threshold is guesswork. See §7.
 
 ---
 
-## 6. Two small defects
+## 6. Two small defects  — DONE
 
 **Artifact logging drops files.** `tools/run_experiment.py:181` breaks after the
 first match of each filename:
@@ -183,7 +217,10 @@ and `avg_tool_calls_per_task`. None are logged. Cost per solved task is a
 headline number sitting unused, and it feeds the efficiency item in
 `production-realism.md`.
 
-**Effort:** minutes each.
+**Done:** the artifact loop logs every match, namespaced by its directory under
+the job root. `total_cost_usd`, `total_tokens`, input/output token splits and
+`avg_tool_calls_per_task` are now metrics, plus a derived
+`cost_per_solved_task_usd`.
 
 ---
 
@@ -205,16 +242,19 @@ a threshold.
 
 ## Order of work
 
-| # | Change | Why now | Effort |
-|---|---|---|---|
-| 2 | fold the review into the MLflow run | completes the gate you asked for | small |
-| 6 | fix artifact `break`; log cost and tokens | minutes, removes silent loss | tiny |
-| 1 | back up or remote the tracking store | everything else points at it | small–medium |
-| 4 | digest `tasks/`; tag frozen sets | restores the split-digest property | small |
-| 5 | oracle gate in CI | catches the failure we just had | small |
-| 3 | pin and log sampling parameters | unrecorded input that moves outputs | small + unknown |
+| # | Change | Status |
+|---|---|---|
+| 2 | fold the review into the MLflow run | done |
+| 6 | fix artifact `break`; log cost and tokens | done |
+| 4 | digest `tasks/`; version the provenance schema | done |
+| 3 | record reasoning effort; document the sampling limit | done |
+| 5 | oracle gate as a pre-push hook | done |
+| 1 | back up the tracking store | deferred (test project) |
+| — | tag frozen task sets | open, process decision |
+| — | measure run-to-run variance | open, blocks a scored gate |
 
-After each: `python tools/check_oracles.py` must still report 48/48.
+After each: `python tools/check_oracles.py` must still report 48/48. The
+pre-push hook now enforces that.
 
 ---
 

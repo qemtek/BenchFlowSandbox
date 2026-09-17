@@ -36,9 +36,15 @@ import subprocess
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
+# Bump when TRACKED changes. `combined` is a hash of the other digests, so
+# adding one silently changes it for unchanged content; this makes runs from
+# either side of such a change distinguishable instead of falsely different.
+PROVENANCE_VERSION = 2
+
 # Directories whose contents change what a run means, keyed by the name the
 # digest is reported under.
 TRACKED = {
+    "tasks": ("tasks", (".md", ".json", ".py", ".sh", "Dockerfile")),
     "environment": ("vendor", (".py",)),
     "knowledge": ("data/banking_knowledge", (".json",)),
     "prompts": ("prompts", (".md", ".yaml")),
@@ -56,7 +62,11 @@ def digest_dir(root: pathlib.Path, suffixes: tuple[str, ...]) -> tuple[str, int]
     if not root.is_dir():
         return "sha256:" + h.hexdigest(), 0
     for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix not in suffixes:
+        if not path.is_file():
+            continue
+        # Match by suffix, or by full name for extensionless files such as
+        # Dockerfile.
+        if path.suffix not in suffixes and path.name not in suffixes:
             continue
         if "__pycache__" in path.parts:
             continue
@@ -159,7 +169,8 @@ print(",".join(pins))
 
 
 def collect(agent: str | None = None) -> dict:
-    out = {"git": git_state(), "toolchain": toolchain(), "digests": {}, "file_counts": {}}
+    out = {"provenance_version": PROVENANCE_VERSION, "git": git_state(),
+           "toolchain": toolchain(), "digests": {}, "file_counts": {}}
     if agent:
         out["agent_harness"] = agent_harness(agent)
     for name, (rel, suffixes) in TRACKED.items():
@@ -195,7 +206,7 @@ def main() -> int:
     if g["dirty"]:
         for f in g["dirty_files"]:
             print(f"           ~ {f}")
-    for name in ("environment", "knowledge", "prompts"):
+    for name in TRACKED:
         print(f"{name:13s}{data['digests'][name][:19]}…  "
               f"({data['file_counts'][name]} files)")
     print(f"{'combined':13s}{data['digests']['combined'][:19]}…")
