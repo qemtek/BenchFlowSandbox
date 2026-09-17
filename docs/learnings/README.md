@@ -11,3 +11,8 @@ these tell you how to know whether the change did anything.
 |---|---|---|
 | 01 | [Standard error](01-standard-error.md) | reading a 6-point difference as an improvement |
 | 02 | [Paired comparison](02-paired-comparison.md) | comparing aggregate pass rates, or an arm against itself |
+| 03 | [Reading intervals](03-reading-intervals.md) | calling "not shown" a proven absence of effect |
+
+`interval_simulation.py` backs the numbers in page 03. It is documentation
+evidence, not part of the rig — run it with
+`python docs/learnings/interval_simulation.py`.
