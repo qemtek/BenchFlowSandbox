@@ -80,7 +80,7 @@ def main() -> int:
     ap.add_argument("--allow-dirty", action="store_true")
     args = ap.parse_args()
 
-    prov = collect()
+    prov = collect(args.agent)
     if prov["git"]["dirty"] and not args.allow_dirty:
         print("Refusing to run: the working tree has uncommitted changes.\n",
               file=sys.stderr)
@@ -135,6 +135,10 @@ def main() -> int:
             "benchflow_version": prov["toolchain"]["benchflow"],
             "docker_version": prov["toolchain"]["docker"],
             "agent": args.agent,
+            # The harness is the other half of the rollout: system prompt,
+            # tool definitions, control loop. BenchFlow pins it per agent,
+            # so a score shift after a BenchFlow upgrade is attributable.
+            "agent_harness": prov.get("agent_harness", "unknown"),
             "model": args.model,
             "skill_mode": args.skill_mode,
             "tasks": args.tasks,

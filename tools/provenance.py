@@ -30,6 +30,8 @@ import argparse
 import hashlib
 import json
 import pathlib
+import shutil
+import sys
 import subprocess
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -80,7 +82,10 @@ def git_state() -> dict:
         "commit": run("rev-parse", "HEAD"),
         "branch": run("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(dirty),
-        "dirty_files": [line[3:] for line in dirty.splitlines()][:20],
+        # porcelain is "XY PATH"; split rather than slice, because run()
+        # strips the leading status column off the first line.
+        "dirty_files": [line.split(maxsplit=1)[-1]
+                        for line in dirty.splitlines() if line.strip()][:20],
     }
 
 
@@ -99,14 +104,64 @@ def toolchain() -> dict:
         except Exception:
             return "unknown"
 
+    # The host interpreter and its pinned deps run the oracle gate and this
+    # script. An empty .venv shadowing an ephemeral uv environment is what broke
+    # the gate on 2026-09-17 — invisible to every other digest here.
+    lock = REPO / "requirements-host.txt"
     return {
-        "benchflow": ver("benchflow", "--version"),
+        "benchflow": ver("benchflow", "--version").split()[-1],
         "docker": ver("docker", "version", "--format", "{{.Server.Version}}"),
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}."
+                  f"{sys.version_info.micro}",
+        "host_deps": ("sha256:" + hashlib.sha256(lock.read_bytes()).hexdigest()
+                      if lock.is_file() else "unpinned"),
     }
 
 
-def collect() -> dict:
+def agent_harness(agent: str) -> str:
+    """The exact agent harness package BenchFlow will install for `agent`.
+
+    The model is only half of what produces a rollout; the other half is the
+    scaffold around it — its system prompt, tool definitions, and control loop.
+    BenchFlow pins that per agent (claude-agent-acp is pinned to a specific
+    `@agentclientprotocol/claude-agent-acp` version), so the pin is readable
+    rather than guessable. Recording it means a score shift after a BenchFlow
+    upgrade can be attributed to the harness instead of the model.
+
+    Returns e.g. "@agentclientprotocol/claude-agent-acp@0.73.0", or "unknown"
+    if the registry cannot be read.
+    """
+    # BenchFlow lives in its own interpreter (uv tool install), so import it
+    # there rather than requiring it in ours.
+    try:
+        bf = shutil.which("benchflow")
+        interp = pathlib.Path(bf).read_text().splitlines()[0].lstrip("#!").strip()
+        out = subprocess.run(
+            [interp, "-c", _HARNESS_PROBE, agent],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return out or "unknown"
+    except Exception:
+        return "unknown"
+
+
+# Runs inside BenchFlow's interpreter. Prints the version-pinned packages in the
+# agent's install command, comma-separated.
+_HARNESS_PROBE = """
+import re, sys
+from benchflow.agents.registry import AGENTS, resolve_agent_key
+key = resolve_agent_key(sys.argv[1])
+cfg = AGENTS[key]
+pins = sorted(set(re.findall(
+    r"[A-Za-z0-9@/._-]+@[0-9][0-9A-Za-z.+-]*", cfg.install_cmd or "")))
+print(",".join(pins))
+"""
+
+
+def collect(agent: str | None = None) -> dict:
     out = {"git": git_state(), "toolchain": toolchain(), "digests": {}, "file_counts": {}}
+    if agent:
+        out["agent_harness"] = agent_harness(agent)
     for name, (rel, suffixes) in TRACKED.items():
         digest, count = digest_dir(REPO / rel, suffixes)
         out["digests"][name] = digest
@@ -128,25 +183,28 @@ def collect() -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--agent", help="also report this agent's pinned harness")
     args = ap.parse_args()
-    data = collect()
+    data = collect(args.agent)
     if args.json:
         print(json.dumps(data, indent=2))
         return 0
     g = data["git"]
-    print(f"git      {g['commit'][:12]} on {g['branch']}"
+    print(f"{'git':13s}{g['commit'][:12]} on {g['branch']}"
           f"{'  DIRTY' if g['dirty'] else ''}")
     if g["dirty"]:
         for f in g["dirty_files"]:
             print(f"           ~ {f}")
     for name in ("environment", "knowledge", "prompts"):
-        print(f"{name:9s}{data['digests'][name][:19]}…  "
+        print(f"{name:13s}{data['digests'][name][:19]}…  "
               f"({data['file_counts'][name]} files)")
-    print(f"combined {data['digests']['combined'][:19]}…")
+    print(f"{'combined':13s}{data['digests']['combined'][:19]}…")
     if "vendored_tau2_commit" in data:
-        print(f"tau2     {data['vendored_tau2_commit'][:12]}")
+        print(f"{'tau2':13s}{data['vendored_tau2_commit'][:12]}")
     for k, v in data["toolchain"].items():
-        print(f"{k:9s}{v}")
+        print(f"{k:13s}{v[:19] + '…' if v.startswith('sha256:') else v}")
+    if "agent_harness" in data:
+        print(f"{'harness':13s}{data['agent_harness']}")
     return 0
 
 

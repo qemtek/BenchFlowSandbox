@@ -1,0 +1,21 @@
+# Host-side tooling. Distinct from the container environment (pinned by base
+# image digest in each task's environment/Dockerfile) — this is what runs
+# check_oracles.py, provenance.py and run_experiment.py on the laptop.
+#
+# Until now this was whatever `uv run --with ...` happened to resolve, which is
+# how the oracle gate silently stopped working: a fresh empty .venv shadowed the
+# ephemeral env and vendor/tau2's imports vanished. Pinned here so `python` in
+# this repo means one thing.
+
+# vendor/tau2 domain imports (no LLM stack — see vendor/SOURCE.txt)
+pydantic
+deepdiff
+addict
+loguru
+python-dotenv
+toml
+pyyaml
+docstring-parser
+
+# experiment tracking; 3.16.0 wrote the existing mlflow.db (alembic b7e2c1a4d9f3)
+mlflow==3.16.0
