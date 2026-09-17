@@ -1,13 +1,17 @@
-# Where the interval comes from, and what it means
+# Confidence intervals
 
-A comparison gives you a delta and an interval around it. This page covers how
-the interval is built and what it licenses you to say.
+When you compare two configurations, the result is a difference in pass rate
+plus a range around it: the confidence interval. The range says how much that
+difference would move if you ran the experiment again.
+
+This page covers how that range is calculated, and which conclusions it
+supports.
 
 Figures come from `python docs/learnings/scripts/interval_simulation.py`.
 
 ---
 
-## Building it
+## How a bootstrap interval is built
 
 After pairing, each of the 48 tasks holds one of three outcomes. Suppose five
 improved, one regressed, and the rest agreed:
@@ -28,9 +32,10 @@ Those 48 values are the whole input. The procedure:
 
 That range is the interval.
 
-The reasoning is that your 48 tasks are a sample from a larger population of
-possible tasks. You do not have that population, so the sample stands in for it,
-and drawing from the sample repeatedly imitates drawing fresh task sets.
+The reasoning: your 48 tasks are a sample drawn from a much larger set of
+possible tasks. You cannot draw fresh samples from that larger set, because you
+do not have it. Drawing repeatedly from your 48 is the closest available
+substitute.
 
 The result is an answer to one question: **given the 48 tasks I happen to have,
 how much would this delta move if I had drawn a different 48?**
@@ -62,7 +67,7 @@ need more tasks or more repeat runs, never more resamples.
 
 ---
 
-## An interval that crosses zero
+## Intervals that cross zero
 
 An interval **crosses zero** when its lower bound is negative and its upper
 bound positive:
@@ -93,7 +98,7 @@ reporting that as "no effect" would be wrong on a coin flip. "The interval spans
 
 ---
 
-## Width matters more than the midpoint
+## Interval width
 
 ```
 delta +4pp, interval -16 to +24    the experiment could not resolve this
@@ -105,7 +110,7 @@ only there does the range exclude the possibility of no change.
 
 ---
 
-## Showing that two arms are equivalent
+## Showing two arms are equivalent
 
 A wide interval does not establish "no difference". If you need that claim, set
 out in advance what difference would be too small to care about, then show the
@@ -116,7 +121,7 @@ substantially more tasks or repeat runs.
 
 ---
 
-## Running several comparisons at once
+## Running several comparisons
 
 A 95% interval excludes the true value 5% of the time by construction. A
 bootstrap percentile interval is approximate, so its real rate is near but not
@@ -129,8 +134,8 @@ chance of a false alarm:
 chance at least one looks significant:  18%
 ```
 
-So one session in five where you try five variants produces a false winner,
-which will tend to be the variant you then pursue.
+So if you test five variants, there is roughly a one in five chance that one of
+them looks better purely by accident.
 
 Three defences, cheapest first:
 
@@ -140,7 +145,7 @@ Three defences, cheapest first:
 
 ---
 
-## Where the method breaks down
+## Where bootstrapping breaks down
 
 **Few tasks differing.** With one task differing out of 48, the interval
 collapses toward a point:
@@ -163,7 +168,7 @@ resample identically, so the bootstrap has no view of it.
 
 ---
 
-## Reproducibility
+## Reproducing an interval
 
 Pass `--bootstrap-seed` whenever you intend to quote an interval:
 

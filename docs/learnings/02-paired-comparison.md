@@ -1,11 +1,13 @@
 # Reducing variance when you measure a change
 
-You run two configurations and one scores higher. The question is whether it
+You run two configurations and one scores higher. You need to know whether it
 would still score higher if you ran everything again.
 
-Variance is how much the measured difference moves between repeats. The smaller
-it is, the smaller an effect you can detect. This page is about the one method
-that reduces it for free.
+Variance is how much that difference moves between repeats. The smaller the
+variance, the smaller an effect you can detect.
+
+This page covers pairing: comparing the two configurations task by task instead
+of by their overall scores. Pairing reduces variance without any extra runs.
 
 Figures come from `python docs/learnings/scripts/pairing_simulation.py`.
 
@@ -79,7 +81,7 @@ not remove the need for repeats.
 
 ---
 
-## How much it buys
+## How much pairing buys
 
 The two methods are limited by different quantities, so they are worth looking
 at separately. Both tables are for 48 tasks, and the detectable effect is
@@ -98,8 +100,9 @@ tasks that differ    standard error    detectable effect
  24 of 48   (50%)        10.2pp             29pp
 ```
 
-A consistent effect on a few tasks separates from chance more easily than a
-scattered one, so fewer disagreements works in your favour.
+Fewer disagreements gives you a tighter interval. A change that flips four
+tasks in the same direction is easier to distinguish from chance than one that
+flips fourteen in both directions.
 
 **Compared by overall rate.** Precision depends on where the pass rates sit, and
 not at all on how much the arms agree:
@@ -126,7 +129,7 @@ are running.
 
 ---
 
-## Running it
+## Running a paired comparison
 
 ```bash
 benchflow eval compare-lift \

@@ -1,11 +1,11 @@
 # How much a pass rate moves between runs
 
-A pass rate is an estimate. Run the identical configuration twice and you get
-two different numbers, because the tasks you happened to include are a sample
-rather than the whole world.
+A pass rate is an estimate. Run the same configuration on two different sets of
+48 tasks and you get two different numbers, because each set contains its own
+mix of easy and hard tasks.
 
-Standard error is how far apart those numbers are expected to be. It sets the
-size of the smallest difference you can distinguish from noise.
+Standard error measures how far apart those numbers are likely to be. It tells
+you the smallest difference you can distinguish from noise.
 
 Two terms are used throughout these pages.
 
@@ -21,7 +21,7 @@ percentage points.
 
 ---
 
-## The formula, and the number
+## Calculating the standard error
 
 A pass rate is a proportion, so:
 
@@ -40,7 +40,7 @@ around 49% to 63%, at one standard error".
 
 ---
 
-## What moves it
+## What changes the standard error
 
 ```
              p=0.5     p=0.7     p=0.9
@@ -53,7 +53,7 @@ n = 480       2.3pp     2.1pp     1.4pp
 
 **The number of tasks**, which you control. The `√n` means halving the error
 costs four times the tasks: 48 to 96 takes you from 7.2 to 5.1, and reaching 2.3
-needs 480. Precision is bought in squares.
+needs 480. Halving the error costs four times the tasks, every time.
 
 **Where the pass rate sits**, which you do not. `p(1−p)` peaks at 0.5 and falls
 away at both ends, so an arm passing 90% of its tasks carries less uncertainty
@@ -61,7 +61,7 @@ than one passing half.
 
 ---
 
-## Comparing two arms costs more than measuring one
+## Comparing two arms
 
 Each arm carries its own error, and a comparison combines them:
 
@@ -80,13 +80,13 @@ That figure belongs to those conditions only. It falls with more tasks and with
 pass rates further from 50%, by the same formula above, so recompute it for the
 set you are running.
 
-Most of that cost is avoidable. Comparing the two arms task by task rather than
-by overall rate removes the largest part of it, which is the subject of
-[the next page](02-paired-comparison.md).
+Most of that cost is avoidable. Comparing the two arms task by task, instead of
+comparing their overall rates, removes the largest part of it. That is what
+[page 02](02-paired-comparison.md) covers.
 
 ---
 
-## What the formula leaves out
+## What the formula does not cover
 
 It assumes the only randomness is which tasks are in your set, and treats the
 agent as deterministic. Rerun one arm unchanged and some tasks will flip anyway.
@@ -99,7 +99,7 @@ spread, which has not been done here yet.
 
 ---
 
-## Three rules
+## Rules of thumb
 
 **Quote `n` with every pass rate.** "62%" is not a result. "62% of 48" is.
 
