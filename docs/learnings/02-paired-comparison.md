@@ -1,7 +1,8 @@
 # Paired comparison
 
-**Running both arms over the same tasks reduces the variance of the difference
-between them. It costs nothing extra.**
+**Two separate steps, and you need both.** Running both arms over the same
+tasks is what reduces the variance of the difference. Pairing the analysis is
+what lets you see the reduction. Neither works alone.
 
 Figures below come from `python docs/learnings/pairing_simulation.py`.
 
@@ -15,7 +16,7 @@ have different remedies.
 
 | Source | What it is | Reduced by |
 |---|---|---|
-| Task sampling | which tasks ended up in your set | **pairing**, and more tasks |
+| Task sampling | which tasks ended up in your set | **same tasks for both arms, analysed paired**; more tasks |
 | Agent behaviour | same arm, same task, different answer | repeat runs, averaged |
 | Measurement | the scorer disagreeing with itself | deterministic scoring |
 
@@ -30,29 +31,52 @@ Tasks differ in difficulty. Some are solved by almost any configuration, some by
 almost none. That spread is large — usually much larger than the effect you are
 testing.
 
-If each arm ran a different set of tasks, the difficulty spread would land
-inside the measured difference, and nothing would separate it from a real
-effect.
+### Step one is a design choice: give both arms the same tasks
 
-**Pairing removes it by subtracting within each task before averaging.** Run
-both arms over the same tasks, then for each task compute:
+If each arm runs a different set, the difficulty spread lands inside the
+measured difference and nothing separates it from a real effect. Give both arms
+the same tasks and the difficulty is identical on both sides, so it cannot
+contribute to the difference between them.
+
+This is what actually creates the precision. Simulated on 48 tasks with a
+genuine 7-point effect, measuring how much the delta really moves between
+repeated experiments:
+
+```
+both arms, same 48 tasks       standard error  3.67pp
+each arm, a different 48       standard error  9.85pp
+```
+
+### Step two is an analysis choice: compare task by task
+
+Having run that design, you still have to analyse it correctly. For each task
+compute:
 
 ```
 d  =  (did the treatment pass)  −  (did the baseline pass)      +1, 0, or −1
 ```
 
-A task's difficulty affects both terms equally, so it cancels in the
-subtraction. The average of `d` across tasks is the delta. That average equals
-the plain difference in pass rates, so the estimate is unchanged — only its
-variance falls.
+The delta is the average of `d`. That average equals the plain difference in
+pass rates, so the estimate is the same either way — what changes is the
+uncertainty you report around it.
 
-Simulated on 48 tasks with a genuine 7-point effect:
+Compare the two arms as though they were independent samples and you report an
+interval sized for an experiment you did not run:
 
 ```
-both arms on the same 48 tasks      standard error  3.67pp
-each arm on a different 48          standard error  9.85pp
-                                    reduction         63%
+same design, analysed paired                3.67pp   correct
+same design, analysed as independent        9.88pp   2.7x too wide
 ```
+
+The precision was already there. Analysing unpaired discards it at the last
+step.
+
+### Neither half works alone
+
+Pairing is impossible without the same-tasks design — there is nothing to match
+on. The same-tasks design is wasted without the paired analysis, because the
+reported interval stays wide enough to hide the effect. "Pairing", used loosely,
+means both.
 
 ---
 
@@ -81,8 +105,8 @@ component falls by `√n` — four runs to halve it.
 The two sources add together. Pairing removes one and leaves the other
 untouched, so a paired comparison is still limited by how erratic the agent is.
 
-**Always pair.** It is free: you were running both arms anyway, and running them
-over the same tasks costs nothing.
+**Always do both.** Running both arms over the same tasks is free, and pairing
+the analysis is a flag on the comparison command.
 
 **Budget for repeats separately.** They are the only thing that touches agent
 variance, and they cost rollouts.
