@@ -7,7 +7,7 @@ Variance is how much the measured difference moves between repeats. The smaller
 it is, the smaller an effect you can detect. This page is about the one method
 that reduces it for free.
 
-Figures come from `python docs/learnings/pairing_simulation.py`.
+Figures come from `python docs/learnings/scripts/pairing_simulation.py`.
 
 ---
 
@@ -157,4 +157,4 @@ efficiency will not show up here at all.
 
 - [01-standard-error.md](01-standard-error.md) — how large the variance is
 - [03-bootstrapping.md](03-bootstrapping.md) — how the interval is built
-- [pairing_simulation.py](pairing_simulation.py) — the figures above
+- [scripts/pairing_simulation.py](scripts/pairing_simulation.py) — the figures above

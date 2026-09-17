@@ -5,7 +5,7 @@ Simulates paired comparisons on a 48-task set so the page's claims can be
 checked rather than taken on trust. Seeded, so the numbers in the page
 reproduce.
 
-    python docs/learnings/interval_simulation.py
+    python docs/learnings/scripts/interval_simulation.py
 """
 
 import random

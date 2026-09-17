@@ -4,7 +4,7 @@
 Shows what pairing does and does not remove, by isolating the two sources of
 variation separately. Seeded, so the numbers in the page reproduce.
 
-    python docs/learnings/pairing_simulation.py
+    python docs/learnings/scripts/pairing_simulation.py
 """
 
 import random

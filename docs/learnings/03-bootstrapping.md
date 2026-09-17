@@ -3,7 +3,7 @@
 A comparison gives you a delta and an interval around it. This page covers how
 the interval is built and what it licenses you to say.
 
-Figures come from `python docs/learnings/interval_simulation.py`.
+Figures come from `python docs/learnings/scripts/interval_simulation.py`.
 
 ---
 
@@ -181,4 +181,4 @@ because the resampling is random.
 
 - [01-standard-error.md](01-standard-error.md) — why the intervals are this wide
 - [02-paired-comparison.md](02-paired-comparison.md) — narrowing them first
-- [interval_simulation.py](interval_simulation.py) — the figures above
+- [scripts/interval_simulation.py](scripts/interval_simulation.py) — the figures above
