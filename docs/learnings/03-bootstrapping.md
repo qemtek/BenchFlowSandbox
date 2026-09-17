@@ -192,5 +192,5 @@ A confirming rerun beats any amount of arguing about the first one.
 ## Related
 
 - [01-standard-error.md](01-standard-error.md) — why the intervals are this wide
-- [02-paired-comparison.md](02-paired-comparison.md) — what gets bootstrapped
+- [02-paired-comparison.md](02-paired-comparison.md) — reducing the variance first
 - [interval_simulation.py](interval_simulation.py) — the evidence above

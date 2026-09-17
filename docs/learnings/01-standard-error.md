@@ -121,5 +121,5 @@ rather than paying for more tasks. See the next page.
 
 ## Related
 
-- [02-paired-comparison.md](02-paired-comparison.md) — how to get under this floor
+- [02-paired-comparison.md](02-paired-comparison.md) — how to reduce it
 - [../versioning-gaps.md](../versioning-gaps.md) — why variance is still unmeasured
