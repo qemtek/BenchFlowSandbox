@@ -1,19 +1,23 @@
-# Standard error: how big a difference has to be before it means anything
+# How much a pass rate moves between runs
 
-A pass rate is an estimate, not a measurement. Run the identical
-configuration twice and you get two different numbers. Standard error is how far
-apart those numbers are expected to be, and knowing it is what separates a
-result from a coincidence.
+A pass rate is an estimate. Run the identical configuration twice and you get
+two different numbers, because the tasks you happened to include are a sample
+rather than the whole world.
 
-Throughout these pages, an **arm** is one complete configuration — prompt,
-toolset, skill mode, model, harness — run over the task set. Comparing two arms
-is the whole activity.
+Standard error is how far apart those numbers are expected to be. It sets the
+size of the smallest difference you can distinguish from noise.
+
+Two terms used throughout these pages. An **arm** is one complete configuration
+(prompt, toolset, skill mode, model, harness) run over the task set. A
+**percentage point** (`pp`) is an absolute gap between two percentages: 56% to
+62% is a rise of 6 percentage points, though a rise of 11% in relative terms. On
+a 48-task set, one task is 2.1pp.
 
 ---
 
-## The number for our set
+## The formula, and the number
 
-A pass rate is a proportion, so its standard error is:
+A pass rate is a proportion, so:
 
 ```
 SE = √( p(1−p) / n )
@@ -25,20 +29,12 @@ SE = √( p(1−p) / n )
 √(0.25 / 48) = 0.072
 ```
 
-**About 7 percentage points.** A single arm scoring 56% is really saying
-"somewhere around 49–63%, at one standard error".
-
-A note on units, used throughout these pages. A **percentage point** (`pp`) is
-an absolute difference between two percentages. Going from 56% to 62% is a rise
-of 6 percentage points, but a rise of about 11% in relative terms. Everything
-here is in percentage points, because that is what "how many tasks changed"
-translates into directly: on a 48-task set, one task is 2.1pp.
+About 7 percentage points. An arm scoring 56% is really saying "somewhere
+around 49% to 63%, at one standard error".
 
 ---
 
-## How it varies
-
-Two things move it, and only one is under your control.
+## What moves it
 
 ```
              p=0.5     p=0.7     p=0.9
@@ -49,77 +45,68 @@ n = 192       3.6pp     3.3pp     2.2pp
 n = 480       2.3pp     2.1pp     1.4pp
 ```
 
-**Sample size.** The `√n` in the denominator means halving the error costs four
-times the tasks. Going from 48 to 96 buys you 7.2 → 5.1. Going to 480 — every
-task run ten times — buys 2.3. There is no cheap route to precision.
+**The number of tasks**, which you control. The `√n` means halving the error
+costs four times the tasks: 48 to 96 takes you from 7.2 to 5.1, and reaching 2.3
+needs 480. Precision is bought in squares.
 
-**Where the pass rate sits.** `p(1−p)` peaks at 0.5 and falls away at both ends.
-An arm passing 90% of tasks has a tighter estimate than one passing half. This
-is not under your control, but it explains why a near-ceiling result feels
-steadier than a middling one.
+**Where the pass rate sits**, which you do not. `p(1−p)` peaks at 0.5 and falls
+away at both ends, so an arm passing 90% of its tasks carries less uncertainty
+than one passing half.
 
 ---
 
-## Comparing two arms is worse than measuring one
+## Comparing two arms costs more than measuring one
 
-Each arm carries its own error, and comparing them combines both:
+Each arm carries its own error, and a comparison combines them:
 
 ```
 SE(difference) = √( SE₁² + SE₂² )
 ```
 
-At 48 tasks and p≈0.5 for both arms, that is **10.2 points**. The 95% interval
-on the difference spans ±20 points.
+At 48 tasks with both arms near 50%, that is 10.2 percentage points.
 
-For a 48-task set with pass rates near 50%, that works out as: the true effect
-has to be about **29 percentage points** — fourteen tasks flipping — before you
-would reliably detect it. Anything smaller and you will usually miss it.
+To call a difference real you need it to clear roughly 2.8 standard errors,
+which is the margin at which a result is unlikely to be chance. So an effect has
+to reach about **29 percentage points**, or fourteen tasks flipping, before this
+comparison would reliably detect it.
 
-That figure is specific to those conditions. It shrinks with more tasks, and
-with pass rates further from 50%, by the same `√(p(1−p)/n)` above. Recompute it
-for whatever set you are actually running rather than carrying 29 around as a
-rule.
+That figure belongs to those conditions only. It falls with more tasks and with
+pass rates further from 50%, by the same formula above, so recompute it for the
+set you are running.
 
-The general point survives: unpaired comparison is expensive, which is why
-[pairing](02-paired-comparison.md) is worth doing.
-
----
-
-## What this figure leaves out
-
-Everything above assumes the only randomness is *which tasks are in your set*.
-It treats the agent as deterministic.
-
-It is not. In this project one task scored 1.00 and then 0.0 across two runs
-with everything held fixed — same code, same prompts, same model. The agent took
-extra actions nobody had asked for on the second run.
-
-So 7 points is a **floor**, not an estimate. The real figure is larger and
-currently unmeasured. Measuring it means running one arm several times over the
-full set and reading the spread — which is the outstanding item in
-[versioning-gaps](../versioning-gaps.md).
-
-Until that is done, treat any single-digit difference as noise by default.
+Most of that cost is avoidable. Comparing the two arms task by task rather than
+by overall rate removes the largest part of it, which is the subject of
+[the next page](02-paired-comparison.md).
 
 ---
 
-## Practical rules
+## What the formula leaves out
 
-**Never quote a pass rate without n.** "62%" is not a result; "62% of 48" is.
+It assumes the only randomness is which tasks are in your set, and treats the
+agent as deterministic. Rerun one arm unchanged and some tasks will flip anyway.
+In this project a task scored 1.00 and then 0.0 across two runs with the code,
+prompts and model all held fixed.
 
-**Compute the floor before running the arm.** If the effect you are hoping for
-is smaller than the floor, the experiment cannot answer the question, and the
-time to know that is before you spend the rollouts.
+So 7 points is a floor rather than an estimate, and the true figure is larger.
+Finding it means running one arm several times over the full set and reading the
+spread, which has not been done here yet.
 
-**A change that flips one or two tasks is not a finding.** At n=48 one task is
-2.1 points, well inside the noise.
+---
 
-**Prefer pairing.** It attacks the largest component of the variance directly
-rather than paying for more tasks. See the next page.
+## Three rules
+
+**Quote `n` with every pass rate.** "62%" is not a result. "62% of 48" is.
+
+**Work out the floor before spending the rollouts.** If the effect you are
+hoping for is smaller than the smallest you could detect, the experiment cannot
+answer the question, and that is worth knowing in advance.
+
+**Treat one or two flipped tasks as noise.** At 48 tasks that is 2 to 4
+percentage points, well inside the floor.
 
 ---
 
 ## Related
 
-- [02-paired-comparison.md](02-paired-comparison.md) — how to reduce it
-- [../versioning-gaps.md](../versioning-gaps.md) — why variance is still unmeasured
+- [02-paired-comparison.md](02-paired-comparison.md) — reducing the variance
+- [03-bootstrapping.md](03-bootstrapping.md) — putting an interval on a result
