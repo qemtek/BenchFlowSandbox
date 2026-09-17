@@ -131,7 +131,16 @@ print(bank_mcp.call_tool('bank_describe_operation', {'operation':'transfer_to_hu
 Faster than a rollout for checking that a tool presents itself the way you
 intended.
 
-**3. Then measure.** Separate `--jobs-dir` per arm, then `compare-lift`. See
+**3. Read what the agent actually did.**
+
+```bash
+benchflow eval view jobs/<run>
+```
+
+Renders the trajectory as a page, which beats reading `results.jsonl` when you
+want to know why a tool change did not land the way you expected.
+
+**4. Then measure.** Separate `--jobs-dir` per arm, then `compare-lift`. See
 `docs/01-prompts.md` for the pairing argument.
 
 ---

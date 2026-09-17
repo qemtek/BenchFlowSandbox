@@ -149,10 +149,45 @@ to call it.
 
 ---
 
-## Running an experiment
+## BenchFlow's commands, and what the wrapper adds
 
-`tools/run_experiment.py` wraps `benchflow eval run` and records everything
-around it.
+Everything here runs on BenchFlow. Use its commands directly whenever you are
+poking around rather than recording a result:
+
+```bash
+benchflow eval run --tasks-dir tasks/task-036 --context-root . \
+  --agent claude-agent-acp --model claude-sonnet-4-5 \
+  --sandbox docker --jobs-dir jobs/scratch     # a throwaway run
+
+benchflow eval list                            # completed evaluations
+benchflow eval metrics --agent claude-agent-acp  # metrics from a jobs dir
+benchflow eval view jobs/scratch               # the trajectory, in a browser
+benchflow eval compare-lift --baseline A --trained B --out lift.md --json-out lift.json
+benchflow review jobs/scratch --rubric tasks/task-036/review/rubric.json
+```
+
+`benchflow eval view` is the one to reach for when a result surprises you: it
+renders the agent's trajectory as a page, which beats reading `results.jsonl`.
+
+**What `tools/run_experiment.py` adds.** BenchFlow has no tracking layer — no
+experiment store, no tags or notes, and it does not emit a task digest in
+anything it writes. So the wrapper exists to record a run, not to replace one.
+It calls `benchflow eval run` with the arguments above, and around that call it:
+
+- refuses to start on a dirty working tree
+- computes the four content digests, the agent harness pin and the host lock,
+  and logs them as MLflow params
+- logs pass rate, efficiency, cost and token metrics
+- optionally runs `benchflow review` and folds the judge's per-criterion results
+  into the same run
+- archives the whole job directory into that run
+
+Use `benchflow eval run` when the answer is disposable. Use the wrapper when you
+intend to cite the number later.
+
+---
+
+## Running an experiment
 
 ```bash
 python tools/run_experiment.py \

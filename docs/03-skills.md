@@ -105,6 +105,10 @@ python tools/run_experiment.py --tasks tasks/task-036 \
   --skill-mode with-skill --experiment skills --note "smoke: does it deploy"
 ```
 
+A skill that silently fails to deploy and a skill that does not help look
+identical in the score. `benchflow eval view jobs/<run>` renders the trajectory
+as a page, so you can see whether the agent read it at all.
+
 **2. Does it help?** Both arms over the whole set, separate job directories:
 
 ```bash
