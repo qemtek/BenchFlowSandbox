@@ -20,6 +20,33 @@ import sys
 from pathlib import Path
 
 
+def same_value(want, got):
+    """Compare one argument, structurally where both sides are JSON.
+
+    tau2 records the nested `arguments` of a discoverable call as a JSON
+    *string*. Comparing those strings byte-for-byte fails on differences that
+    carry no meaning: gold holds `"disputed_amount": 150.00`, and any tool call
+    that round-trips through JSON produces `150.0`. Every agent call does round
+    trip, so the string comparison was a false negative waiting to fire.
+    """
+    if want == got:
+        return True
+    for parse in (want, got):
+        if not isinstance(parse, (str, dict, list, int, float, bool)):
+            return False
+    def load(v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except ValueError:
+                return v
+        return v
+    lw, lg = load(want), load(got)
+    if lw == lg:
+        return True
+    return str(want) == str(got)
+
+
 def matches(required, actual):
     if required["name"] != actual.get("tool"):
         return False
@@ -29,7 +56,7 @@ def matches(required, actual):
     keys = required.get("compare_args")
     if keys is None:
         keys = list(want)
-    return all(str(got.get(k)) == str(want.get(k)) for k in keys)
+    return all(same_value(want.get(k), got.get(k)) for k in keys)
 
 
 def run():

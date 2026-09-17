@@ -1,6 +1,6 @@
 #!/bin/sh
-# Reference solution: the gold actions, driven through the same CLI
-# the agent uses. Proves the task is reachable via the agent interface.
+# Reference solution: the gold actions, replayed through the same MCP
+# tool surface the agent is given. Proves the task is reachable.
 set -eu
 
-bank call transfer_to_human_agents '{"reason": "account_ownership_dispute", "summary": ""}'
+exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json

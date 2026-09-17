@@ -1,30 +1,6 @@
 #!/bin/sh
-# Reference solution: the gold actions, driven through the same CLI
-# the agent uses. Proves the task is reachable via the agent interface.
+# Reference solution: the gold actions, replayed through the same MCP
+# tool surface the agent is given. Proves the task is reachable.
 set -eu
 
-bank call log_verification '{"name": "Carlos Rodriguez", "user_id": "cr89a2b3c4", "address": "4521 West 6th Street, Austin, TX 78703", "email": "carlos.rodriguez@gmail.com", "phone_number": "512-555-0193", "date_of_birth": "03/22/1988", "time_verified": "2025-11-14 03:40:00 EST"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847", "arguments": "{\"user_id\": \"cr89a2b3c4\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_ev\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_lb\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_green\"}"}'
-bank call get_credit_card_accounts_by_user '{"user_id": "cr89a2b3c4"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_1\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_2\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_3\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_ev\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_lb\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_green\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_ev\", \"reason\": \"stolen\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_lb\", \"reason\": \"stolen\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_cr89a2b3c4_green\", \"reason\": \"stolen\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_2\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_1\", \"user_id\": \"cr89a2b3c4\", \"delivery_option\": \"RUSH\", \"delivery_fee\": 35, \"card_design\": \"PREMIUM\", \"design_fee\": 0, \"shipping_address\": \"4521 West 6th Street, Austin, TX 78703\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739", "arguments": "{\"account_id\": \"chk_cr89a2b3c4_3\", \"user_id\": \"cr89a2b3c4\", \"delivery_option\": \"STANDARD\", \"delivery_fee\": 0, \"card_design\": \"CLASSIC\", \"design_fee\": 0, \"shipping_address\": \"4521 West 6th Street, Austin, TX 78703\"}"}'
+exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json

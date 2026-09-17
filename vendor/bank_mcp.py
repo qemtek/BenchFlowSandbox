@@ -230,6 +230,11 @@ def call_tool(name: str, arguments: dict) -> str:
         result = tk.use_tool("call_discoverable_agent_tool", **payload)
         bank_cli._save(db)
         bank_cli._save_session(tk)
+        # Log in tau2's vocabulary, not MCP's: the action verifier matches the
+        # gold action name, which is always call_discoverable_agent_tool with a
+        # JSON-string `arguments`. Logging "bank_call_operation" here would make
+        # every ACTION-scored task unpassable.
+        bank_cli._log_call("assistant", "call_discoverable_agent_tool", payload)
         return result
 
     if not tk.has_tool(name):
@@ -237,6 +242,7 @@ def call_tool(name: str, arguments: dict) -> str:
     result = tk.use_tool(name, **arguments)
     bank_cli._save(db)
     bank_cli._save_session(tk)
+    bank_cli._log_call("assistant", name, arguments)
     return result
 
 

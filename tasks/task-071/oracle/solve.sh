@@ -1,11 +1,6 @@
 #!/bin/sh
-# Reference solution: the gold actions, driven through the same CLI
-# the agent uses. Proves the task is reachable via the agent interface.
+# Reference solution: the gold actions, replayed through the same MCP
+# tool surface the agent is given. Proves the task is reachable.
 set -eu
 
-bank call log_verification '{"name": "Yumi Tanaka", "user_id": "yt71c9e4f2", "address": "2847 Willamette Street, Portland, OR 97202", "email": "yumi.tanaka@aurora.io", "phone_number": "503-555-0741", "date_of_birth": "08/23/1990", "time_verified": "2025-11-14 03:40:00 EST"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847", "arguments": "{\"user_id\": \"yt71c9e4f2\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "open_bank_account_4821"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "open_bank_account_4821", "arguments": "{\"user_id\": \"yt71c9e4f2\", \"account_type\": \"business_checking\", \"account_class\": \"Sky Blue\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "open_bank_account_4821", "arguments": "{\"user_id\": \"yt71c9e4f2\", \"account_type\": \"business_savings\", \"account_class\": \"Gold Saver Account\"}"}'
+exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json

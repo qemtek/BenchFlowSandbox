@@ -152,6 +152,11 @@ After each: `python tools/check_oracles.py` must still report 48/48.
 
 ## Still out of reach
 
+**Interface comparison.** The shell-CLI arm was removed on 2026-09-17. Two
+interfaces meant every experiment ran twice or carried a caveat, and transport
+is not one of the levers worth studying here. The agent reaches the bank over
+MCP only. See `docs/02-tools.md`.
+
 **Multi-turn conversation.** BenchFlow's user loop is progressive disclosure,
 not dialogue — each round is a fresh agent process that loses its role. See
 `deprecated/README.md`.

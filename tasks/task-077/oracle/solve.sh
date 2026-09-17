@@ -1,30 +1,6 @@
 #!/bin/sh
-# Reference solution: the gold actions, driven through the same CLI
-# the agent uses. Proves the task is reachable via the agent interface.
+# Reference solution: the gold actions, replayed through the same MCP
+# tool surface the agent is given. Proves the task is reachable.
 set -eu
 
-bank call log_verification '{"name": "Liang Jinhai", "user_id": "lj82d4f1a9", "address": "1420 Lake Shore Drive, Chicago, IL 60610", "email": "jinhai.liang@techventures.com", "phone_number": "312-555-0847", "date_of_birth": "04/12/2002", "time_verified": "2025-11-14 03:40:00 EST"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847", "arguments": "{\"user_id\": \"lj82d4f1a9\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_lj82d4f1a9\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_538bfb9cba\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892", "arguments": "{\"card_id\": \"dbc_lj82d4f1a9_bluest\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "freeze_debit_card_3892", "arguments": "{\"card_id\": \"dbc_538bfb9cba\"}"}'
-bank call get_credit_card_accounts_by_user '{"user_id": "lj82d4f1a9"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "order_replacement_credit_card_7291"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "order_replacement_credit_card_7291", "arguments": "{\"credit_card_account_id\": \"cc_lj82d4f1a9_silver\", \"user_id\": \"lj82d4f1a9\", \"shipping_address\": \"1420 Lake Shore Drive, Chicago, IL 60610\", \"reason\": \"lost\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_lj82d4f1a9\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_538bfb9cba\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893", "arguments": "{\"card_id\": \"dbc_lj82d4f1a9_bluest\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "unfreeze_debit_card_3893", "arguments": "{\"card_id\": \"dbc_538bfb9cba\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_lj82d4f1a9_bluest\", \"reason\": \"lost\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_538bfb9cba\", \"reason\": \"lost\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739", "arguments": "{\"account_id\": \"chk_lj82d4f1a9\", \"user_id\": \"lj82d4f1a9\", \"delivery_option\": \"RUSH\", \"delivery_fee\": 0, \"card_design\": \"PREMIUM\", \"design_fee\": 0, \"shipping_address\": \"1420 Lake Shore Drive, Chicago, IL 60610\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "activate_debit_card_8292"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "activate_debit_card_8292", "arguments": "{\"card_id\": \"dbc_8eed7b16caeb\", \"last_4_digits\": \"7260\", \"expiration_date\": \"11/29\", \"cvv\": \"741\", \"pin\": \"5739\"}"}'
+exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json

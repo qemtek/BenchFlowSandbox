@@ -1,22 +1,6 @@
 #!/bin/sh
-# Reference solution: the gold actions, driven through the same CLI
-# the agent uses. Proves the task is reachable via the agent interface.
+# Reference solution: the gold actions, replayed through the same MCP
+# tool surface the agent is given. Proves the task is reachable.
 set -eu
 
-bank call log_verification '{"name": "Sarah Chen", "user_id": "cec8333d41", "address": "1847 Hawthorne Boulevard, Apt 3C, Portland, OR 97214", "email": "sarah.chen.design@gmail.com", "phone_number": "503-555-2847", "date_of_birth": "05/22/1991", "time_verified": "2025-11-14 03:40:00 EST"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_all_user_accounts_by_user_id_3847", "arguments": "{\"user_id\": \"cec8333d41\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_cec8333d41_green\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_cec8333d41_green\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_cec8333d41_evergreen\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_bank_account_transactions_9173", "arguments": "{\"account_id\": \"chk_cec8333d41_evergreen\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "file_debit_card_transaction_dispute_6281"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "file_debit_card_transaction_dispute_6281", "arguments": "{\"transaction_id\": \"btxn_28eee7145c29\", \"account_id\": \"chk_cec8333d41_evergreen\", \"card_id\": \"dbc_c8feebe975cf\", \"user_id\": \"cec8333d41\", \"dispute_category\": \"card_present_fraud\", \"transaction_date\": \"11/09/2025\", \"discovery_date\": \"11/14/2025\", \"disputed_amount\": 347.99, \"transaction_type\": \"signature_purchase\", \"card_in_possession\": true, \"pin_compromised\": \"no\", \"contacted_merchant\": false, \"police_report_filed\": false, \"written_statement_provided\": true, \"provisional_credit_eligible\": true, \"customer_max_liability_amount\": 50, \"card_action\": \"close_and_reissue\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "close_debit_card_4721", "arguments": "{\"card_id\": \"dbc_c8feebe975cf\", \"reason\": \"fraud_suspected\"}"}'
-bank call unlock_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "order_debit_card_5739", "arguments": "{\"account_id\": \"chk_cec8333d41_evergreen\", \"user_id\": \"cec8333d41\", \"delivery_option\": \"STANDARD\", \"delivery_fee\": 0, \"card_design\": \"CLASSIC\", \"design_fee\": 0, \"shipping_address\": \"1847 Hawthorne Boulevard, Apt 3C, Portland, OR 97214\"}"}'
-bank call call_discoverable_agent_tool '{"agent_tool_name": "get_debit_cards_by_account_id_7823", "arguments": "{\"account_id\": \"chk_cec8333d41_blue\"}"}'
-bank call transfer_to_human_agents '{"reason": "fraud_or_security_concern", "summary": ""}'
+exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json

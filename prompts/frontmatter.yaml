@@ -1,5 +1,9 @@
-# Task frontmatter template. Curly-brace fields are filled by tools/make_task.py.
-# Edit here to change configuration for every generated task at once.
+# Task config for every generated task. Edit this, then regenerate.
+#
+# The agent reaches the bank over MCP. The shell CLI arm was removed on
+# 2026-09-17: two interfaces meant every experiment had to be run twice or
+# caveated, and the levers worth studying here are skills, prompts, tools and
+# model/harness choice — not transport.
 schema_version: '1.3'
 task:
   name: bank/{task_slug}
@@ -8,6 +12,7 @@ metadata:
   source_task_id: {task_id}
   reward_basis: DB
   requestor: assistant
+  tool_interface: mcp
 agent:
   timeout_sec: 900.0
 verifier:
@@ -15,8 +20,12 @@ verifier:
   timeout_sec: 300.0
 sandbox:
   workdir: /app
-  # no-network would arm BenchFlow's egress firewall, which shells out to
-  # iptables and needs NET_ADMIN — unavailable under Docker Desktop. Nothing
-  # in the task reaches out: the knowledge base is local files.
   network_mode: public
   build_timeout_sec: 1800.0
+  mcp_servers:
+    - name: bank
+      transport: stdio
+      command: python
+      args: ['/opt/bank/vendor/bank_mcp.py']
+      env:
+        BANK_DB: /data/db.json

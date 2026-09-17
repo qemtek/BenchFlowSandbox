@@ -60,9 +60,11 @@ RUN python -m pip install \\
 # These COPY sources resolve against the shared build context (--context-root .),
 # so vendor/ and the knowledge base exist once in the repo rather than being
 # duplicated into all 40 task packages.
+# The agent reaches the bank through the MCP server declared in task.md.
+# bank_cli.py stays as the shared dispatcher that bank_mcp.py imports for
+# session state, autounlock and toolsets — it is no longer on PATH, so there is
+# one interface to experiment against instead of two.
 COPY vendor /opt/bank/vendor
-RUN printf '#!/bin/sh\\nexec python /opt/bank/vendor/bank_cli.py "$@"\\n' > /usr/local/bin/bank \\
-    && chmod +x /usr/local/bin/bank
 
 COPY data/banking_knowledge/documents /data/documents
 
@@ -213,6 +215,33 @@ import sys
 from pathlib import Path
 
 
+def same_value(want, got):
+    """Compare one argument, structurally where both sides are JSON.
+
+    tau2 records the nested `arguments` of a discoverable call as a JSON
+    *string*. Comparing those strings byte-for-byte fails on differences that
+    carry no meaning: gold holds `"disputed_amount": 150.00`, and any tool call
+    that round-trips through JSON produces `150.0`. Every agent call does round
+    trip, so the string comparison was a false negative waiting to fire.
+    """
+    if want == got:
+        return True
+    for parse in (want, got):
+        if not isinstance(parse, (str, dict, list, int, float, bool)):
+            return False
+    def load(v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except ValueError:
+                return v
+        return v
+    lw, lg = load(want), load(got)
+    if lw == lg:
+        return True
+    return str(want) == str(got)
+
+
 def matches(required, actual):
     if required["name"] != actual.get("tool"):
         return False
@@ -222,7 +251,7 @@ def matches(required, actual):
     keys = required.get("compare_args")
     if keys is None:
         keys = list(want)
-    return all(str(got.get(k)) == str(want.get(k)) for k in keys)
+    return all(same_value(want.get(k), got.get(k)) for k in keys)
 
 
 def run():
@@ -497,18 +526,20 @@ def briefing(task: dict) -> str:
 
 
 def oracle(task: dict) -> str:
-    lines = [
-        "#!/bin/sh",
-        "# Reference solution: the gold actions, driven through the same CLI",
-        "# the agent uses. Proves the task is reachable via the agent interface.",
-        "set -eu",
-        "",
-    ]
-    for action in task["evaluation_criteria"]["actions"]:
-        args = json.dumps(action.get("arguments") or {})
-        as_flag = " --as user" if action.get("requestor") == "user" else ""
-        lines.append("bank" + as_flag + " call " + action["name"] + " '" + args + "'")
-    return "\n".join(lines) + "\n"
+    """The reference solution, replayed through the MCP tool surface.
+
+    MCP is the agent's only interface, so the oracle must use it too. An oracle
+    that drove a CLI the agent cannot reach would prove the task solvable by
+    something nobody ships.
+    """
+    return (
+        "#!/bin/sh\n"
+        "# Reference solution: the gold actions, replayed through the same MCP\n"
+        "# tool surface the agent is given. Proves the task is reachable.\n"
+        "set -eu\n"
+        "\n"
+        "exec python /opt/bank/vendor/mcp_replay.py /oracle/actions.json\n"
+    )
 
 
 def generate(task_id: str, out_root: pathlib.Path) -> None:
@@ -542,6 +573,9 @@ def generate(task_id: str, out_root: pathlib.Path) -> None:
         (pkg / "verifier" / "test.sh").write_text(TEST_SH)
     (pkg / "review" / "rubric.json").write_text(json.dumps(RUBRIC, indent=2))
     (pkg / "oracle" / "solve.sh").write_text(oracle(task))
+    (pkg / "oracle" / "actions.json").write_text(
+        json.dumps(task["evaluation_criteria"]["actions"], indent=2)
+    )
 
     print("generated " + str(pkg.relative_to(REPO)))
 

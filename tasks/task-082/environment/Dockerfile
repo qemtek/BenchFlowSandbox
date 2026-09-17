@@ -19,9 +19,11 @@ RUN python -m pip install \
 # These COPY sources resolve against the shared build context (--context-root .),
 # so vendor/ and the knowledge base exist once in the repo rather than being
 # duplicated into all 40 task packages.
+# The agent reaches the bank through the MCP server declared in task.md.
+# bank_cli.py stays as the shared dispatcher that bank_mcp.py imports for
+# session state, autounlock and toolsets — it is no longer on PATH, so there is
+# one interface to experiment against instead of two.
 COPY vendor /opt/bank/vendor
-RUN printf '#!/bin/sh\nexec python /opt/bank/vendor/bank_cli.py "$@"\n' > /usr/local/bin/bank \
-    && chmod +x /usr/local/bin/bank
 
 COPY data/banking_knowledge/documents /data/documents
 
