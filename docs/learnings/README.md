@@ -1,6 +1,7 @@
 # Learnings
 
-Short pages on things worth understanding before reading a number off this rig.
+Short pages on things worth understanding before believing a number this
+project produces.
 Each one exists because getting it wrong produced, or would have produced, a
 confident conclusion that was not true.
 
@@ -14,4 +15,4 @@ these tell you how to know whether the change did anything.
 | 03 | [Bootstrapping](03-bootstrapping.md) | trusting a narrow interval, or calling "not shown" a proven absence of effect |
 
 `pairing_simulation.py` and `interval_simulation.py` back the numbers in pages 02 and 03. They are documentation evidence,
-not part of the rig.
+not part of the evaluation code.

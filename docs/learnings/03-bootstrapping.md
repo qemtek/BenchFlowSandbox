@@ -1,8 +1,7 @@
 # Bootstrapping: where the interval comes from, and how to read it
 
-[Paired comparison](02-paired-comparison.md) ends with `compare-lift` handing
-you a delta and an interval. This page is what happens in between, and what the
-result is safe to claim.
+A comparison gives you a delta and an interval around it. This page covers
+where the interval comes from and what it is safe to claim.
 
 Every number below is reproducible: `python docs/learnings/interval_simulation.py`.
 
@@ -10,10 +9,8 @@ Every number below is reproducible: `python docs/learnings/interval_simulation.p
 
 ## The problem it solves
 
-You ran two arms and 6 of 48 tasks changed: 5 improved, 1 regressed. Your delta
-is +8.3 points.
-
-Run the same two arms again and you would get a different figure. How different?
+You ran two arms and 6 of 48 tasks changed. Run the same two arms again and you
+would get a different figure. How different?
 You would need the sampling distribution of a paired delta over binary outcomes
 to answer that from a formula — and picking the wrong formula is easy, because
 the textbook approximations assume shapes this data does not have when only 6 of

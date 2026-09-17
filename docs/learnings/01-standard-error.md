@@ -1,6 +1,6 @@
 # Standard error: how big a difference has to be before it means anything
 
-Every pass rate this rig produces is an estimate. Run the identical
+A pass rate is an estimate, not a measurement. Run the identical
 configuration twice and you get two different numbers. Standard error is how far
 apart those numbers are expected to be, and knowing it is what separates a
 result from a coincidence.
@@ -71,13 +71,17 @@ SE(difference) = √( SE₁² + SE₂² )
 At 48 tasks and p≈0.5 for both arms, that is **10.2 points**. The 95% interval
 on the difference spans ±20 points.
 
-Put the consequence plainly: to reliably detect a difference between two
-independently-run arms of 48 tasks, the true effect has to be about **29
-percentage points** — fourteen tasks flipping. Anything smaller and you will
-usually fail to see it.
+For a 48-task set with pass rates near 50%, that works out as: the true effect
+has to be about **29 percentage points** — fourteen tasks flipping — before you
+would reliably detect it. Anything smaller and you will usually miss it.
 
-That is the honest ceiling on unpaired comparison at this scale, and it is why
-[paired comparison](02-paired-comparison.md) is not optional.
+That figure is specific to those conditions. It shrinks with more tasks, and
+with pass rates further from 50%, by the same `√(p(1−p)/n)` above. Recompute it
+for whatever set you are actually running rather than carrying 29 around as a
+rule.
+
+The general point survives: unpaired comparison is expensive, which is why
+[pairing](02-paired-comparison.md) is worth doing.
 
 ---
 
@@ -86,9 +90,9 @@ That is the honest ceiling on unpaired comparison at this scale, and it is why
 Everything above assumes the only randomness is *which tasks are in your set*.
 It treats the agent as deterministic.
 
-It is not. We have a direct counterexample: one task scored 1.00 and then 0.0 on
-identical inputs, a pinned commit, and the same model. The agent filed two
-disputes nobody asked for.
+It is not. In this project one task scored 1.00 and then 0.0 across two runs
+with everything held fixed — same code, same prompts, same model. The agent took
+extra actions nobody had asked for on the second run.
 
 So 7 points is a **floor**, not an estimate. The real figure is larger and
 currently unmeasured. Measuring it means running one arm several times over the
