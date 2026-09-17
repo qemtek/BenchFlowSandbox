@@ -1,31 +1,82 @@
 # Paired comparison: getting under the noise floor without more tasks
 
 Comparing two arms by their aggregate pass rates needs a 29-point effect before
-it can see anything ([standard error](01-standard-error.md)). Pairing gets that
-down to roughly half, and costs nothing but running both arms over the same
-tasks — which you were doing anyway.
+it can see anything ([standard error](01-standard-error.md)). Running both arms
+over the same tasks and differencing per task cuts that to about 10, for no
+extra rollouts.
+
+Every figure below is reproducible:
+`python docs/learnings/pairing_simulation.py`.
 
 ---
 
-## Why aggregate comparison wastes information
+## Two sources of variation, only one of which pairing touches
 
-Most of the spread between two runs comes from **which tasks are hard**, not
-from which arm is better.
+A delta moves between runs for two unrelated reasons, and keeping them apart is
+the whole of this page.
 
-task-004 is difficult under every arm. task-012 is easy under every arm. When
-you compare 56% against 62%, that difficulty variation is sitting inside both
-numbers, and the comparison cannot tell it apart from the effect you care about.
-Difficulty ends up counted as noise.
+**Which tasks you drew.** Your 48 are a sample. task-004 is hard for every
+configuration; task-012 is easy for every configuration. Draw a different 48 and
+the pass rate moves, regardless of which arm you ran.
 
-It is not noise. It is a known, fixed property of each task, identical on both
-sides. Pairing exploits exactly that.
+**What the agent did that time.** Rerun the identical arm on the identical tasks
+and some tasks flip. We have a direct case: 1.00 then 0.0 on the same commit.
+
+`compare-lift`'s interval covers the first. Pairing attacks the first. Nothing
+here touches the second.
 
 ---
 
-## What pairing does
+## How pairing removes it
 
-Both arms ran the same 48 tasks, so compare them task by task rather than in
-aggregate. Every task falls into one of four cells:
+Not by ignoring anything. By **subtracting within each task before averaging**.
+
+Run both arms over the same 48 tasks and compute a per-task difference:
+
+```
+d_i  =  treatment_i  −  baseline_i          each one +1, 0, or −1
+delta = mean(d_i)
+```
+
+Task difficulty sits in both terms of that subtraction, identically, so it
+cancels exactly. A task that is hard contributes its hardness to
+`treatment_i` and to `baseline_i`, and `d_i` never sees it.
+
+If instead each arm ran its own 48 tasks, difficulty would enter the difference
+twice and stay there. That is the entire cost of not pairing.
+
+Simulated, with tasks drawn from a population and a genuine 7-point effect:
+
+```
+same 48 tasks   (paired)     SE 3.67pp   detects 10pp
+a different 48  (unpaired)   SE 9.85pp   detects 28pp
+reduction                    63%
+```
+
+**The point estimate is identical either way.** The mean of the per-task
+differences equals the difference of the two pass rates — no information is
+discarded and nothing is thrown away. Only the variance falls.
+
+---
+
+## What pairing cannot do
+
+Hold the task set fixed and rerun both arms. Now the only thing varying is the
+agent, and pairing buys nothing:
+
+```
+paired SE on a fixed task set:  6.48pp
+```
+
+The two arms' randomness is independent, so there is no shared term to subtract.
+This is why pairing does not remove the need for repeat runs: they measure a
+different source of variation, and the two add together.
+
+---
+
+## Reading the four cells
+
+The per-task differences group into a familiar table:
 
 ```
                         treatment
@@ -34,48 +85,43 @@ baseline   pass         a       b
            fail         c       d
 ```
 
-Cells `a` and `d` — where the arms agree — carry **no information about the
-difference**. A task both arms passed tells you it was easy, not that the
-treatment helped. The same for a task both arms failed.
+Cells `a` and `d` are the tasks where `d_i = 0`. They are **not discarded** —
+they sit in the average as zeros, which is why the denominator is 48 and not 6.
+What they contribute is zero variance, and that is the saving.
 
-Only the disagreements matter:
+Cells `b` and `c` carry the signal:
 
 ```
 c    failed in baseline, passed in treatment    evidence for
 b    passed in baseline, failed in treatment    evidence against
 ```
 
-This is McNemar's test. The question stops being "is 62% bigger than 56%" and
-becomes "of the tasks that changed, did more improve than regressed".
+So the question shifts from "is 62% bigger than 56%" to "among the tasks that
+changed, did more improve than regressed, and by enough to outrun chance".
 
 ---
 
 ## A worked example
 
 ```
-both passed                      28 tasks     no information
-both failed                      14 tasks     no information
-improved (fail → pass)            5 tasks     evidence for
-regressed (pass → fail)           1 task      evidence against
+both passed                      28 tasks     d = 0
+both failed                      14 tasks     d = 0
+improved (fail → pass)            5 tasks     d = +1
+regressed (pass → fail)           1 task      d = −1
                                  ──────────
-                                 48 tasks
+delta = (5 − 1) / 48 = +8.3pp
 ```
 
-Aggregate view: 29/48 → 33/48, a 4-point gain sitting inside a ±20-point
-interval. Unreadable.
+Aggregate view: 29/48 → 33/48 inside a ±20-point interval. Unreadable.
 
-Paired view: 6 tasks changed, 5 of them favourably. That is a much sharper
-question, and one a bootstrap can put an interval around.
-
-Note the trade: your effective sample is the 6 discordant tasks, not 48. That
-sounds like a loss and is a gain, because you removed the variation that was
-drowning the signal rather than averaging over it.
+Paired view: the same +8.3pp, but the 42 agreements contribute no variance, so
+the interval around it is roughly a third as wide.
 
 ---
 
-## How much it buys you
+## How much it buys you, by how much the arms differ
 
-The paired error depends on how many tasks disagree, not on how many you ran:
+The paired error depends on how many tasks disagree:
 
 ```
 tasks that disagree      SE      detectable effect
@@ -84,16 +130,16 @@ tasks that disagree      SE      detectable effect
  9 of 48   (20%)        6.5pp         18pp
 14 of 48   (30%)        7.9pp         22pp
 
-unpaired, same 48      10.2pp         29pp
+unpaired                9.9pp         28pp
 ```
 
-Read that from the right column. A change that moves 10% of tasks is detectable
-paired and invisible unpaired.
+Read the right column. A change that moves 10% of tasks is detectable paired and
+invisible unpaired.
 
-The counter-intuitive part: **fewer disagreements is better**, because a
-consistent effect on a small number of tasks is easier to distinguish from
-chance than a scattered one. An arm that changes everything randomly gives you a
-wide interval no matter how many tasks you run.
+The counter-intuitive part: **fewer disagreements is better.** A consistent
+effect on a small number of tasks is easier to separate from chance than a
+scattered one. An arm that changes many tasks in both directions gives a wide
+interval however many tasks you run.
 
 ---
 
@@ -144,5 +190,7 @@ your change was meant to improve efficiency rather than correctness,
 ## Related
 
 - [01-standard-error.md](01-standard-error.md) — where the floor comes from
+- [03-bootstrapping.md](03-bootstrapping.md) — how the interval gets built
+- [pairing_simulation.py](pairing_simulation.py) — the evidence above
 - [../01-prompts.md](../01-prompts.md), [../03-skills.md](../03-skills.md) —
   the levers you would compare
