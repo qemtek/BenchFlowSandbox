@@ -46,7 +46,7 @@ python tools/check_oracles.py
 
 # 3. Run one task, tracked
 python tools/run_experiment.py --tasks tasks/task-036 \
-  --agent claude-agent-acp --model claude-sonnet-4-5 \
+  --agent claude-agent-acp --model claude-sonnet-4-6 \
   --experiment baseline --note "first run"
 
 # 4. Look at it
@@ -233,11 +233,20 @@ python tools/run_experiment.py --tasks tasks \
 - **Switch.** `--agent`, `--model`, `--reasoning-effort`.
 - **Arms.** One commit, no rebuild, no regeneration.
 - **Recorded as** `agent`, `agent_harness`, `model`, `model_is_alias`,
-  `reasoning_effort`.
-- **Trap.** Pass a dated model id. `claude-sonnet-4-5` is an alias, so a run
+  `reasoning_effort`, and — from the capture — `provider_model`, `max_tokens`,
+  `thinking`, `thinking_budget_tokens`, `temperature`.
+- **Trap.** Pass a dated model id. `claude-sonnet-4-6` is an alias, so a run
   recorded under it does not say which weights answered. The runner records
-  `model_is_alias` either way, so a run is never silently ambiguous — but the
-  number is still unattributable.
+  `model_is_alias` either way, and `--capture-provider` recovers the resolved
+  snapshot as `provider_model`, so a run is never silently ambiguous.
+- **Trap.** Do not leave effort unset. The harness default enables extended
+  thinking with a budget of 63999 against a `max_tokens` of 64000, which is
+  close to `max`, and logs only "harness-default" — so a run at near-maximum
+  reasoning looks unconfigured. The runner defaults to `medium` instead, and
+  records what the provider actually received. Effort belongs with the model:
+  two arms at different budgets are two different agents, and at the top of
+  the range the agent can reason around a weak prompt, leaving a prompt or
+  skill change no headroom to show up in.
 - **Related.** `--trials N` reruns one arm through BenchFlow's `--matrix`, one
   nested run per trial, and puts the spread on the parent. That spread is the
   noise floor, and it is still unmeasured here.
@@ -287,7 +296,7 @@ poking around rather than recording a result:
 
 ```bash
 benchflow eval run --tasks-dir tasks/task-036 --context-root . \
-  --agent claude-agent-acp --model claude-sonnet-4-5 \
+  --agent claude-agent-acp --model claude-sonnet-4-6 \
   --sandbox docker --jobs-dir jobs/scratch     # a throwaway run
 
 benchflow eval list                            # completed evaluations
@@ -344,7 +353,7 @@ intend to cite the number later.
 python tools/run_experiment.py \
   --tasks tasks \                     # or tasks/task-036 for one
   --agent claude-agent-acp \
-  --model claude-sonnet-4-5 \
+  --model claude-sonnet-4-6 \
   --skill-mode with-skill \
   --reasoning-effort high \
   --experiment skills \
@@ -352,7 +361,7 @@ python tools/run_experiment.py \
   --review                            # also grade against the rubric
 ```
 
-**Pass a dated model id if you want the snapshot pinned.** `claude-sonnet-4-5`
+**Pass a dated model id if you want the snapshot pinned.** `claude-sonnet-4-6`
 is an alias pointing at whichever snapshot is current, so a run recorded under
 it does not say which weights answered. Dated ids pass straight through —
 BenchFlow's own default is `claude-haiku-4-5-20251001` — so this is your choice,
@@ -368,7 +377,11 @@ git_commit, git_branch, provenance_version
 digest_tasks, digest_environment, digest_knowledge, digest_prompts, digest_combined
 briefing_prompt_uri, briefing_prompt_version
 vendored_tau2_commit, benchflow_version, docker_version
-agent, agent_harness, model, reasoning_effort, sampling_params
+agent, agent_harness, model, model_is_alias, reasoning_effort
+provider_model                      the dated snapshot that answered
+max_tokens, thinking,               what the provider was actually sent,
+thinking_budget_tokens,             read off the capture rather than from
+temperature, top_p, top_k           what we asked the harness for
 skill_mode, tasks, include, expected_tasks, concurrency, trials, config_override
 jobs_dir                            the back-pointer: which directory produced it
 reviewer_model, reviewer_harness, rubric_digest, rubric_criteria, reviewer_network

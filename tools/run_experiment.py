@@ -680,7 +680,13 @@ def main() -> int:
     ap.add_argument("--tasks", required=True, help="task dir, or a set root")
     ap.add_argument("--include", action="append", default=[])
     ap.add_argument("--agent", default="claude-agent-acp")
-    ap.add_argument("--model", default="claude-sonnet-4-5")
+    # Defaults rather than flags, so two arms cannot differ in the agent
+    # itself. Effort is set explicitly because the harness default is not
+    # neutral: it enables extended thinking with a budget of 63999 against a
+    # max_tokens of 64000, which is close to `max`. At that level the agent can
+    # reason its way around a weak prompt, and a prompt or skill change has no
+    # headroom left to show up in.
+    ap.add_argument("--model", default="claude-sonnet-4-6")
     ap.add_argument("--experiment", default="banking")
     ap.add_argument("--note", default="")
     ap.add_argument("--concurrency", type=int, default=1)
@@ -693,7 +699,7 @@ def main() -> int:
     # BenchFlow's ACP runtime sets no temperature/top_p/seed, so reasoning
     # effort is the only generation knob reachable for claude-agent-acp.
     # Left unset it takes an unrecorded default; set it so it is recorded.
-    ap.add_argument("--reasoning-effort", default="")
+    ap.add_argument("--reasoning-effort", default="medium")
     ap.add_argument("--config-override", default="")
     ap.add_argument("--allow-dirty", action="store_true")
     ap.add_argument("--resume", default="",
