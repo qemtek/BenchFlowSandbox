@@ -709,6 +709,7 @@ tools/
   capture_proxy.py      provider-side capture for subscription runs
   document_tools.py     regenerates docs/tools.md
 data/banking_knowledge/ seed database, 698 documents, 97 τ² case files
+TODO.md                 what to do next, and why in that order
 docs/                   the guides
   learnings/            how to tell a result from a coincidence
   iterations/           one page per change to scoring or task text

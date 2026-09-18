@@ -72,8 +72,8 @@ enough to clear that threshold. Flip a coin five times, get five heads, and
 nobody concludes the coin is weighted, because five flips do that once in every
 sixteen attempts.
 
-Nothing in that derivation refers to evaluation, task sets or this project. It
-is a fact about the threshold 0.05, and it moves when the threshold does:
+Nothing in that derivation refers to evaluation or task sets at all. It is a
+fact about the threshold 0.05, and it moves when the threshold does:
 
 ```
 p < 0.10, two-sided      5 tasks
@@ -166,7 +166,7 @@ cannot produce a result. Above it, read the confidence interval from
 
 **Partial-credit scoring.** The floor is a consequence of pass and fail being
 the only two outcomes. A score that moved from 0.3 to 0.8 without crossing the
-pass threshold counts as no change here, though it plainly is one. Comparisons
+pass threshold counts as no change, though it plainly is one. Comparisons
 on a continuous score use a different test, one that reads the size of each
 task's movement as well as its direction, and it can reach significance on fewer
 tasks.

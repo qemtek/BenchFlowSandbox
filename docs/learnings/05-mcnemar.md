@@ -201,9 +201,9 @@ def mcnemar_p(treatment_only: int, baseline_only: int) -> float:
 The two counts come from the per-task pairs in `lift.json`: tasks where the
 treatment passed and the baseline did not, and the reverse.
 
-This is the exact form of the test, which is the one to use here. The older
-chi-squared form approximates it, and the approximation is poor at the
-disagreement counts a 48-task set produces.
+This is the exact form of the test. The older chi-squared form approximates it,
+and the approximation is poor at the small disagreement counts a task set of
+this size produces, so the exact form is the one to use.
 
 ---
 
