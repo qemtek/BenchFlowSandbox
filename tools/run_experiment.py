@@ -237,7 +237,11 @@ def skill_uptake_metrics(job_dir: pathlib.Path, tasks_path: pathlib.Path) -> dic
     rollouts = skill_uptake.read_job(job_dir, names)
     if not rollouts:
         return {}
-    return skill_uptake.summarise(rollouts)
+    # The load-position figures are None when nothing opened the skill, which
+    # is the ordinary case on a no-skill arm. MLflow rejects a null metric, and
+    # logging 0 instead would read as "opened at call zero".
+    return {k: v for k, v in skill_uptake.summarise(rollouts).items()
+            if v is not None}
 
 
 def health_metrics(job_dir: pathlib.Path) -> tuple[dict, bool]:
