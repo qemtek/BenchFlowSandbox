@@ -16,7 +16,7 @@ was changed, and what happened.
 |---|---|---|
 | 001 | [What the identity blocker means](001-identity-blocker-definition.md) | landed, unmeasured |
 | 002 | [Telling the agent what disclosure means](002-briefing-disclosure-order.md) | landed, unmeasured |
-| 003 | [A procedural skill, aimed at the four remaining failures](003-bank-case-handling-skill.md) | applied, awaiting runs |
+| 003 | [A procedural skill, aimed at the four remaining failures](003-bank-case-handling-skill.md) | measured, inconclusive |
 | 004 | [Recording which briefing produced a task set](004-briefing-provenance.md) | superseded by 005 |
 | 005 | [The briefing moves into MLflow's prompt registry](005-briefing-in-the-prompt-registry.md) | landed |
 

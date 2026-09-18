@@ -14,8 +14,9 @@ these tell you how to know whether the change did anything.
 | 03 | [Confidence intervals](03-bootstrapping.md) | trusting a narrow interval, or reading "we could not tell" as "there was no difference" |
 | 04 | [The six-task floor](04-the-six-task-floor.md) | mistaking a handful of tasks changing hands for a measured improvement |
 | 05 | [McNemar's test](05-mcnemar.md) | reading a p-value as a size, or a clean-sweep bar as the bar for every split |
+| 06 | [Statistical power](06-statistical-power.md) | spending rollouts on a comparison that cannot answer the question, or quoting a winner at its inflated size |
 
-`scripts/` holds the simulations behind the figures in pages 02 to 05.
+`scripts/` holds the simulations behind the figures in pages 02 to 06.
 They are documentation evidence rather than part of the evaluation code, and
 each is seeded so the numbers in the pages reproduce.
 
@@ -23,6 +24,7 @@ each is seeded so the numbers in the pages reproduce.
 python docs/learnings/scripts/pairing_simulation.py
 python docs/learnings/scripts/interval_simulation.py
 python docs/learnings/scripts/mcnemar_simulation.py
+python docs/learnings/scripts/power_simulation.py
 ```
 
 ---

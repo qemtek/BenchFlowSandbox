@@ -173,12 +173,83 @@ the Result section that the deterministic arm is underpowered by construction.
 
 ## Result
 
-Not yet measured. The change is in the tree: `SKILL_MD` added to
-`tools/make_task.py`, all 48 packages regenerated with an identical `SKILL.md`
-(one distinct checksum across 48 files), `check_oracles.py` prints 48/48 and
-`smoke: stdio transport OK`.
+Measured 2026-09-17/18. Baseline `fea7eb97`, treatment `90f6336f`, comparison
+`7eb5535b`. 24 tasks, full coverage on both arms, `skill_mode` the only lever
+`compare_arms.py` found moving.
+
+```
+                  no-skill   with-skill
+passed              3 / 24       3 / 24
+tool calls             751          759
+calls per gold        2.69         2.72
+
+pass-rate delta  +0.000   95% CI [-0.208, +0.208]
+```
+
+Undecided, as predicted. Six tasks were discordant — `task-012`, `task-036`,
+`task-043` gained, `task-050`, `task-062`, `task-075` lost — which nets to
+nothing and is roughly the number the floor said would be needed to see an
+effect at all.
+
+### The treatment arm mostly did not receive the treatment
+
+The more useful finding came from the provider capture, not the scores. The
+skill's *name* reached the model in 24 of 24 rollouts; its *body* in 6.
+
+```
+skill body loaded:  task-085 task-087 task-088 task-091 task-092 task-095
+```
+
+Claude Code advertises an available skill and reads `SKILL.md` only when it
+judges the skill relevant. So 18 of 24 treatment rollouts ran with the skill
+present and unread. This is not a test of the skill; it is a test of offering
+one, and the pass-rate result above should be read as such.
+
+In the 6 where it was read, neither arm passed anything, and calls per gold
+action moved the wrong way, 1.79 to 1.97. Six tasks, so that is an observation
+rather than a finding.
+
+### `total_skill_invocations` does not measure this
+
+Both arms logged `total_skill_invocations: 0`, including the arm where six
+rollouts demonstrably read the file. This page and `docs/03-skills.md` both
+tell the reader to check that metric first and to treat zero as "the skill
+never deployed". On this evidence the metric does not count Claude Code skill
+reads, so zero means nothing either way.
+
+The check that does work is the provider capture: grep the skill body in
+`trajectory/llm_trajectory.jsonl`. Without `--capture-provider` that file does
+not exist, and the uptake problem would have been invisible — the arms would
+have looked like a clean null result.
+
+### A confound in the uptake, unresolved
+
+Five of the six that loaded the skill were in the batch replayed by `--resume`,
+which also ran at a later commit and lower concurrency. The loaders are also
+much larger tasks: mean 17.5 gold actions against 9.7 for the rest. Those two
+explanations cannot be separated from this run. Deciding it needs one arm run
+straight through with no resume, which was not possible here.
+
+### What this licenses
+
+Nothing about whether the skill helps. Two things it does establish:
+
+- Uptake, not content, is the binding constraint. A skill read by a quarter of
+  rollouts cannot move a pass rate whatever it says, so the next question is
+  how to get it read — the briefing pointing at it, or `--skills-dir`, or a
+  skill whose description matches the cases better.
+- The no-skill arm is clean. The skill body appears in 0 of 24 baseline
+  rollouts and the name in 0 of 24, so BenchFlow's stripping works as
+  `docs/03-skills.md` claims: honest by construction.
 
 ## Verdict
 
-Pending the two runs above. This is the only one of the three changes whose
-claim rests on a measurement.
+Inconclusive on the question asked, and it could not have been otherwise at
+this size. Recorded rather than retried, because retrying the same design would
+buy the same answer.
+
+The next run worth paying for is not this one repeated. It is the noise floor:
+one arm, twice, unchanged. Six discordant tasks out of 24 with a zero net delta
+is equally consistent with a real two-way effect and with an agent that flips
+six tasks between identical runs, and until that number exists no comparison
+here can be read.
