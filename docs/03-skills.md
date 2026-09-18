@@ -57,7 +57,7 @@ is a context economy. Content that applies to every task has nothing to
 economise, and putting it in a skill only adds a chance the model declines it.
 
 `bank-case-handling` is on the wrong side of that line. It restates the
-briefing — verify before changing anything, search `/data/documents` for the
+briefing — verify before changing anything, use `kb_search`/`kb_get` for the
 procedure, reach operations through `bank_search` — so a model reading its
 description correctly concludes it already has that, and 18 rollouts of 24 did.
 See [docs/iterations/003](iterations/003-bank-case-handling-skill.md).
@@ -115,7 +115,7 @@ right document and then skipped its numbered eligibility checks, one that found
 the bypass-code procedure and escalated instead of completing it, two that
 passed a plausible `reason` code rather than the documented one, and a
 trajectory that spent its first six calls guessing tool names before its first
-search of `/data/documents`.
+knowledge-base search.
 
 ```markdown
 ---
@@ -135,10 +135,9 @@ The lookup is how you verify, so it comes first. What waits for
 every account detail you state in your closing report.
 
 ## 2. Find the procedure before acting
-`/data/documents` holds the bank's internal documentation. Eligibility rules,
-fees and reason codes live there, not in the tool descriptions.
-
-    rg -l "replacement card" /data/documents
+Use `kb_search` to find the relevant internal procedure, then `kb_get` to read
+only the selected document. Eligibility rules, fees and reason codes live in
+the knowledge base, not in the tool descriptions.
 
 ## 3. Reaching a specialised operation
 Most operations are not in the loaded toolkit. Three steps:

@@ -9,7 +9,7 @@ schema_version: '1.3'
 task:
   name: bank/task-074
 metadata:
-  briefing_prompt_uri: prompts:/bank-briefing/2
+  briefing_prompt_uri: prompts:/bank-briefing/3
   domain: banking_knowledge
   source_task_id: task_074
   reward_basis: DB
@@ -31,6 +31,7 @@ sandbox:
       args: ['/opt/bank/vendor/bank_mcp.py']
       env:
         BANK_DB: /data/db.json
+        BANK_KB_DIR: /opt/bank/knowledge
 ---
 
 ## prompt
@@ -53,9 +54,16 @@ The bank runs many more operations than are loaded. Three steps reach them:
    arguments.
 
 Finding an operation does not tell you how to use it correctly. Eligibility
-rules, fees, and policy live in the bank's internal documentation at
-`/data/documents`; search it (`rg`, `grep`) and follow the procedure it
-describes.
+rules, fees, and policy live in the bank's internal knowledge base. Search it
+through the bounded documentation tools:
+
+1. **kb_search** — returns document IDs, titles, and short matching snippets.
+2. **kb_get** — reads one document selected from those results.
+
+Use `kb_search` first, then call `kb_get` only for documents relevant to the
+current decision. Do not use the terminal or filesystem to search or read the
+knowledge base, and do not open every search result. Stop retrieving documents
+once you have the procedure, reason code, or policy needed for the next action.
 
 ### Bank policy
 

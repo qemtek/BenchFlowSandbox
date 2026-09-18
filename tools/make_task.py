@@ -54,12 +54,13 @@ ENV DEBIAN_FRONTEND=noninteractive \\
     PIP_DISABLE_PIP_VERSION_CHECK=1 \\
     PIP_NO_CACHE_DIR=1
 
-# ripgrep/grep are the agent's knowledge-base search; no embedding API needed.
+# Knowledge-base retrieval is exposed through bounded MCP tools. The document
+# store is not an agent-facing shell interface.
 # curl/xz are here only to fetch Node below, and are left in place because
 # BenchFlow's bootstrap probes for them before deciding it has work to do.
 RUN apt-get update && \\
     apt-get install -y --no-install-recommends \\
-      ripgrep jq curl ca-certificates xz-utils && \\
+      curl ca-certificates xz-utils && \\
     rm -rf /var/lib/apt/lists/*
 
 # The agent's own runtime, baked rather than fetched once per rollout.
@@ -118,7 +119,7 @@ RUN python -m pip install \\
 # one interface to experiment against instead of two.
 COPY vendor /opt/bank/vendor
 
-COPY data/banking_knowledge/documents /data/documents
+COPY data/banking_knowledge/documents /opt/bank/knowledge
 
 # The seed database is staged per task: a task with initial_state modifies it,
 # so it cannot safely be shared even though these 40 currently all match.
@@ -387,14 +388,14 @@ RUBRIC = {
         {
             "name": "no_fabricated_policy_or_terms",
             "description": "Any policy, fee, or product term the agent stated is supported by the knowledge base.",
-            "guidance": "Fails if the agent asserted a specific rate, fee, deadline, or eligibility rule that does not appear in /data/documents.",
+            "guidance": "Fails if the agent asserted a specific rate, fee, deadline, or eligibility rule that does not appear in the internal knowledge base.",
             "blocker": 1,
             "weight": 1,
         },
         {
             "name": "grounded_in_knowledge_base",
             "description": "The agent consulted the knowledge base before acting.",
-            "guidance": "Score higher when the agent searched /data/documents to find the correct procedure or tool, rather than guessing tool names.",
+            "guidance": "Score higher when the agent used kb_search and kb_get to find the correct procedure or tool, rather than guessing tool names or opening unrelated documents.",
             "blocker": 0,
             "weight": 2,
         },
@@ -433,15 +434,16 @@ The lookup is how you verify, so it comes first. What waits for
 every account detail you state in your closing report.
 
 ## 3. Search the documentation before you search for a tool
-`/data/documents` holds the bank's internal procedures: eligibility rules, fees,
-reason codes, and the name of the operation each procedure ends in. Tool
-descriptions carry none of that.
+The internal knowledge base holds eligibility rules, fees, reason codes, and
+the name of the operation each procedure ends in. Tool descriptions carry none
+of that. Use the bounded documentation tools:
 
-    rg -l "replacement card" /data/documents
-    rg -i "eligib|must not|do not" <the file you found>
+    kb_search   return document IDs, titles and short snippets
+    kb_get      read one selected document
 
-Going to the tool catalogue first costs calls and finds operations whose
-preconditions you have not read.
+Search first, then open only the relevant result. Do not use the terminal or
+filesystem to search the knowledge base, and stop retrieving once you have the
+procedure or policy needed for the next action.
 
 ## 4. Follow the whole procedure, not its last step
 A procedure written as numbered steps is a checklist. The eligibility checks

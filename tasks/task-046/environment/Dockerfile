@@ -4,12 +4,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# ripgrep/grep are the agent's knowledge-base search; no embedding API needed.
+# Knowledge-base retrieval is exposed through bounded MCP tools. The document
+# store is not an agent-facing shell interface.
 # curl/xz are here only to fetch Node below, and are left in place because
 # BenchFlow's bootstrap probes for them before deciding it has work to do.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ripgrep jq curl ca-certificates xz-utils && \
+      curl ca-certificates xz-utils && \
     rm -rf /var/lib/apt/lists/*
 
 # The agent's own runtime, baked rather than fetched once per rollout.
@@ -68,7 +69,7 @@ RUN python -m pip install \
 # one interface to experiment against instead of two.
 COPY vendor /opt/bank/vendor
 
-COPY data/banking_knowledge/documents /data/documents
+COPY data/banking_knowledge/documents /opt/bank/knowledge
 
 # The seed database is staged per task: a task with initial_state modifies it,
 # so it cannot safely be shared even though these 40 currently all match.

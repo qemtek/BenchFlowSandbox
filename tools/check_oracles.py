@@ -180,12 +180,23 @@ def smoke_transport(workdir: pathlib.Path) -> list[str]:
     """
     db = workdir / "smoke.json"
     db.write_bytes((REPO / "data" / "banking_knowledge" / "db.json").read_bytes())
-    env = {**os.environ, "BANK_DB": str(db), "HOME": str(workdir)}
+    env = {
+        **os.environ,
+        "BANK_DB": str(db),
+        "BANK_KB_DIR": str(DOCUMENTS),
+        "HOME": str(workdir),
+    }
     requests = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
          "params": {"name": "bank_search", "arguments": {"query": "close account"}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+         "params": {"name": "kb_search",
+                    "arguments": {"query": "replacement credit card", "limit": 5}}},
+        {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+         "params": {"name": "kb_get", "arguments": {
+             "document_id": "doc_credit_cards_credit_card_replacements_001"}}},
     ]
     proc = subprocess.run(
         [PYTHON, str(VENDOR / "bank_mcp.py")],
@@ -206,12 +217,23 @@ def smoke_transport(workdir: pathlib.Path) -> list[str]:
         problems.append("initialize returned nothing")
     tools = (replies.get(2, {}).get("result") or {}).get("tools") or []
     names = {t.get("name") for t in tools}
-    for required in ("bank_search", "bank_describe_operation", "bank_call_operation"):
+    for required in (
+        "bank_search", "bank_describe_operation", "bank_call_operation",
+        "kb_search", "kb_get",
+    ):
         if required not in names:
             problems.append(f"tools/list is missing {required}")
     body = json.dumps((replies.get(3, {}).get("result") or {}))
     if "close_bank_account" not in body:
         problems.append("tools/call bank_search did not find close_bank_account")
+    kb_search_body = json.dumps((replies.get(4, {}).get("result") or {}))
+    if "doc_credit_cards_credit_card_replacements_001" not in kb_search_body:
+        problems.append("tools/call kb_search did not find replacement-card policy")
+    if len(kb_search_body) > 5000:
+        problems.append("tools/call kb_search exceeded its bounded response")
+    kb_get_body = json.dumps((replies.get(5, {}).get("result") or {}))
+    if "How to Order a Replacement Credit Card" not in kb_get_body:
+        problems.append("tools/call kb_get did not return the selected policy")
     if not problems:
         print(f"  smoke: stdio transport OK ({len(tools)} tools advertised)")
     return problems

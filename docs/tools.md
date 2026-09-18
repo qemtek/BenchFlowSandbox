@@ -57,8 +57,8 @@ which are out of scope until a user simulator exists.
 
 ## Discoverable tools (44)
 
-Not advertised in `tools/list`. The agent must find the name in
-`/data/documents`, call `unlock_discoverable_agent_tool`, then
+Not advertised in `tools/list`. The agent must find the name with
+`kb_search` and `kb_get`, call `unlock_discoverable_agent_tool`, then
 `call_discoverable_agent_tool`. **This mechanism is what the benchmark
 actually tests** — withholding it is the `no_discovery` arm.
 

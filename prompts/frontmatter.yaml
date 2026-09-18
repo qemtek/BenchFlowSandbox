@@ -29,3 +29,4 @@ sandbox:
       args: ['/opt/bank/vendor/bank_mcp.py']
       env:
         BANK_DB: /data/db.json
+        BANK_KB_DIR: /opt/bank/knowledge

@@ -150,7 +150,7 @@ no file edits:
 
 ```bash
 python tools/run_experiment.py --tasks tasks/task-036 \
-  --config-override '{"agent":{"prompt_prefix":"Search /data/documents before calling any tool."}}' \
+  --config-override '{"agent":{"prompt_prefix":"Use kb_search, then kb_get only the relevant procedure before acting."}}' \
   --note "does a search-first nudge help"
 ```
 

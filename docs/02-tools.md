@@ -12,13 +12,15 @@ sandbox:
       args: ['/opt/bank/vendor/bank_mcp.py']
 ```
 
-17 tools are advertised: the 14-tool core toolkit, plus three that reach the 44
-specialised operations.
+19 tools are advertised: the 14-tool core toolkit, two bounded knowledge-base
+tools, plus three that reach the 44 specialised operations.
 
 ```
 bank_search              find an operation by describing what you want
 bank_describe_operation  read its signature: arguments, types, defaults
 bank_call_operation      run it
+kb_search                find policy documents; returns bounded snippets
+kb_get                   read one selected policy document
 ```
 
 `vendor/bank_cli.py` is still in the tree, but it is no longer an interface. It
@@ -84,23 +86,21 @@ on `--config-override` and skills on `--skill-mode`; tool changes do not.
 
 ## C. Change how the agent searches the knowledge base
 
-tau2 ships this as a designed ladder. The 698 documents in `/data/documents` are
-where operations are discovered, and how the agent may search them is a
-capability you control:
+The 698 policy documents are exposed through a bounded, two-stage interface:
 
-| Variant | Capability | Needs an API |
-|---|---|---|
-| Plain | no search | no |
-| Grep | keyword search over documents | no |
-| Shell | agentic shell search (current setup) | no |
-| KB-search | dense vector retrieval | yes — embeddings |
+1. `kb_search` ranks documents with local BM25-style keyword scoring and
+   returns at most ten IDs, titles and short snippets.
+2. `kb_get` reads one exact document selected from those results. Individual
+   responses are capped at 8 KiB.
 
-The Dockerfile installs `ripgrep`, giving the shell variant. Remove that line
-and the agent falls back to plain `grep`. Dense retrieval needs the retrieval
-chain vendored — `vendor/tau2/domains/banking_knowledge/__init__.py` stubs it
-out, and `KnowledgeToolsWithKBSearch` needs an embedding model.
+The documents are copied to `/opt/bank/knowledge` for the MCP server. The
+briefing explicitly makes shell/filesystem retrieval unsupported, and the task
+image no longer installs `ripgrep` or `jq`. `bank_search` is separate: it
+searches the operation catalogue, not policy documents.
 
-Same tasks, same scoring, one variable.
+The ranking implementation lives in `vendor/bank_mcp.py`. It can later be
+replaced by dense or hybrid retrieval without changing the agent-facing tool
+contract.
 
 ---
 

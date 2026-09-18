@@ -22,8 +22,9 @@ front; the other 44 are *discoverable* — their names appear only in the bank's
 internal documentation, and finding them is a large part of what the tasks
 actually test.
 
-**698 internal documents** at `/data/documents`, holding the eligibility rules,
-fees and reason codes the tools deliberately do not explain.
+**698 internal documents** behind bounded `kb_search` and `kb_get` tools,
+holding the eligibility rules, fees and reason codes the banking tools
+deliberately do not explain.
 
 **Two independent checks on every rollout:** a deterministic verifier that reads
 the database, and an optional LLM judge that reads the trajectory against a
@@ -263,17 +264,17 @@ python tools/run_experiment.py --tasks tasks \
 
 Three sub-levers, all more expensive than they look.
 
-**The container** — base image, `ripgrep`, `jq`, the pinned pip versions. Edit
+**The container** — base image, bounded KB retrieval, the pinned pip versions. Edit
 the `DOCKERFILE` constant in `make_task.py`, then regenerate. Two commits,
 rebuild required, recorded in `digest_tasks` because the Dockerfile lives
 inside the package. The base image is pinned by digest rather than tag:
 `python:3.12-slim` is mutable and would otherwise change under you.
 
-**How the agent searches the knowledge base** — τ² ships this as a ladder:
-plain (no search), grep, shell (current — `ripgrep` is installed), and
-KB-search (dense retrieval). Dropping a rung is one line of the Dockerfile.
-Dense retrieval needs the retrieval chain vendored;
-`vendor/tau2/domains/banking_knowledge/__init__.py` stubs it out.
+**How the agent searches the knowledge base** — the current interface is a
+two-stage bounded retrieval flow: `kb_search` returns ranked titles and short
+snippets, then `kb_get` reads one selected document. The ranking is local
+keyword/BM25-style retrieval; dense or hybrid ranking can replace it behind the
+same tool contract.
 
 **The knowledge base itself** — the 698 documents, recorded as
 `digest_knowledge`. Handle with care: the documents name the discoverable

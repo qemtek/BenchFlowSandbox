@@ -21,6 +21,7 @@ was changed, and what happened.
 | 005 | [The briefing moves into MLflow's prompt registry](005-briefing-in-the-prompt-registry.md) | landed |
 | 006 | [Listing every request moves into the briefing](006-every-request-in-the-briefing.md) | applied, awaiting runs |
 | 007 | [Each task's own starting state reaches the database](007-per-task-starting-state.md) | landed |
+| 008 | [Bound knowledge retrieval before the next noise-floor run](008-bounded-knowledge-base-retrieval.md) | applied, awaiting runs |
 
 ---
 

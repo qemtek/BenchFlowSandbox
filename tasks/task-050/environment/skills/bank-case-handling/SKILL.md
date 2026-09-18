@@ -19,15 +19,16 @@ The lookup is how you verify, so it comes first. What waits for
 every account detail you state in your closing report.
 
 ## 3. Search the documentation before you search for a tool
-`/data/documents` holds the bank's internal procedures: eligibility rules, fees,
-reason codes, and the name of the operation each procedure ends in. Tool
-descriptions carry none of that.
+The internal knowledge base holds eligibility rules, fees, reason codes, and
+the name of the operation each procedure ends in. Tool descriptions carry none
+of that. Use the bounded documentation tools:
 
-    rg -l "replacement card" /data/documents
-    rg -i "eligib|must not|do not" <the file you found>
+    kb_search   return document IDs, titles and short snippets
+    kb_get      read one selected document
 
-Going to the tool catalogue first costs calls and finds operations whose
-preconditions you have not read.
+Search first, then open only the relevant result. Do not use the terminal or
+filesystem to search the knowledge base, and stop retrieving once you have the
+procedure or policy needed for the next action.
 
 ## 4. Follow the whole procedure, not its last step
 A procedure written as numbered steps is a checklist. The eligibility checks

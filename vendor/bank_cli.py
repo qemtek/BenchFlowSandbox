@@ -227,9 +227,9 @@ def cmd_search(requestor: str, query: str) -> int:
     operation it needs rather than hiding schemas in prose, so this returns
     matching names and descriptions from both.
 
-    Finding the operation does NOT tell you how to use it correctly — eligibility
-    rules, fees and policy live in /data/documents. Search here to locate the
-    operation; read the documentation to perform it properly.
+    Finding the operation does NOT tell you how to use it correctly. Search here
+    to locate the operation; use the MCP knowledge-base tools to retrieve the
+    documented procedure before acting.
     """
     tk = _toolkit(_load(), requestor)
     inner = getattr(tk, "_tk", tk)
@@ -260,7 +260,7 @@ def cmd_search(requestor: str, query: str) -> int:
     for _, name, desc in hits[:15]:
         print(f"  {name}\n      {desc[:120]}")
     print(
-        "\nUse `bank show <name>` for parameters. Check /data/documents for the "
+        "\nUse `bank show <name>` for parameters. Retrieve the documented "
         "procedure before acting."
     )
     return 0

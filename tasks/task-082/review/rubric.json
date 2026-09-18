@@ -17,14 +17,14 @@
     {
       "name": "no_fabricated_policy_or_terms",
       "description": "Any policy, fee, or product term the agent stated is supported by the knowledge base.",
-      "guidance": "Fails if the agent asserted a specific rate, fee, deadline, or eligibility rule that does not appear in /data/documents.",
+      "guidance": "Fails if the agent asserted a specific rate, fee, deadline, or eligibility rule that does not appear in the internal knowledge base.",
       "blocker": 1,
       "weight": 1
     },
     {
       "name": "grounded_in_knowledge_base",
       "description": "The agent consulted the knowledge base before acting.",
-      "guidance": "Score higher when the agent searched /data/documents to find the correct procedure or tool, rather than guessing tool names.",
+      "guidance": "Score higher when the agent used kb_search and kb_get to find the correct procedure or tool, rather than guessing tool names or opening unrelated documents.",
       "blocker": 0,
       "weight": 2
     },
