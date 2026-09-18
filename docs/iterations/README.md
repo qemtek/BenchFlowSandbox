@@ -16,7 +16,7 @@ was changed, and what happened.
 |---|---|---|
 | 001 | [What the identity blocker means](001-identity-blocker-definition.md) | landed, unmeasured |
 | 002 | [Telling the agent what disclosure means](002-briefing-disclosure-order.md) | landed, unmeasured |
-| 003 | [A procedural skill, aimed at the four remaining failures](003-bank-case-handling-skill.md) | measured, inconclusive |
+| 003 | [A procedural skill, aimed at the four remaining failures](003-bank-case-handling-skill.md) | measured, mis-specified |
 | 004 | [Recording which briefing produced a task set](004-briefing-provenance.md) | superseded by 005 |
 | 005 | [The briefing moves into MLflow's prompt registry](005-briefing-in-the-prompt-registry.md) | landed |
 
@@ -66,6 +66,14 @@ where a subset of task packages differs — a stray regeneration that touched si
 of 48 produces a delta that looks ordinary and is contaminated. A prompt arm
 changes every task digest on purpose, and that case is allowed because
 `briefing_prompt_uri` explains it.
+
+**Prove the treatment reached the agent.** Deploying a change is not the same
+as the agent receiving it, and the two look identical in a pass rate. Iteration
+003 deployed a skill to 24 rollouts and 6 opened it; the arms came out equal
+because 18 of them were the baseline run a second time. Anything the agent
+chooses whether to consult — a skill, an optional tool, a document — needs a
+delivery number reported beside the delta, and a page that cannot produce one
+is reporting on a treatment it did not verify.
 
 **Measure the control when the instrument is stochastic.** The reviewer is an
 LLM and disagrees with itself between runs. Comparing a new rubric against an

@@ -214,15 +214,19 @@ python tools/run_experiment.py --tasks tasks \
 
 - **Switch.** `--skill-mode no-skill` against `--skill-mode with-skill`.
 - **Arms.** One commit, no rebuild, no regeneration. The cleanest lever here.
-- **Recorded as** `skill_mode`, plus `total_skill_invocations` as a metric.
+- **Recorded as** `skill_mode`, plus `skill_load_rate` and
+  `skill_first_load_call_mean` as metrics. Needs `--capture-provider`.
 - **Why the baseline is trustworthy.** Under `no-skill` BenchFlow deletes the
   bundled skills directory from the staged copy and strips its `COPY` lines, so
   a `COPY .` cannot leak it. Honest by construction rather than by trust.
 - **Gate.** None. `check_oracles.py` never runs an agent, so this is the one
   lever with no cheap deterministic check. Budget for the rollouts.
-- **Trap.** Read `total_skill_invocations` before anything else. At zero the
-  skill never deployed, and "it did not help" and "it was never read" are the
-  same number.
+- **Trap.** Deploying a skill makes it available, not used. Claude Code shows
+  the model the skill's one-line description and reads the body only if the
+  model asks; the 2026-09-17 arm offered one in 24 rollouts of 24 and had it
+  opened in 6. Read `skill_load_rate` before anything else — below it, "it did
+  not help" and "it was never read" are the same number. `total_skill_invocations`
+  does not measure this and reads 0 either way.
 
 ### The model and harness
 
@@ -394,8 +398,12 @@ health_zero_tool_rollouts           rollouts that made no tool call at all
 health_missing_llm_trajectory, health_malformed_llm_trajectory
 health_coverage                     scored / total — read this before the delta
 telemetry_coverage                  whether the token counts can be believed
-total_skill_invocations             separates "the skill did not help" from
+skill_load_rate                     separates "the skill did not help" from
                                     "the agent never opened it"
+skill_first_load_call_mean          followed as a procedure, or consulted
+                                    once already committed
+total_skill_invocations             BenchFlow's own counter; reads 0 for
+                                    Claude Code skills, kept for continuity
 verifier_errored
 
 trials_completed, pass_rate_mean, pass_rate_sd    with --trials N
@@ -679,10 +687,10 @@ vendor/
 tools/
   make_task.py          generates the 48 packages
   register_briefing.py  seeds or imports a briefing into the prompt registry
-  compare_arms.py       records a paired comparison, and guards what it compares
   check_oracles.py      the gate
   run_experiment.py     tracked runs
-  compare_arms.py       tracked comparisons between two runs
+  compare_arms.py       records a paired comparison, and guards what it compares
+  skill_uptake.py       whether the agent opened the skill it was offered
   provenance.py         digests, git state, harness and host pins
   capture_proxy.py      provider-side capture for subscription runs
   document_tools.py     regenerates docs/tools.md

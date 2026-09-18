@@ -47,6 +47,30 @@ param, so which arm a run belongs to is recorded rather than remembered.
 
 ---
 
+## What belongs in a skill rather than the prompt
+
+General instructions belong in the briefing; specific ones belong in a skill.
+The dividing line is how many tasks the content applies to, and it is a
+mechanical consequence of how skills are delivered: Claude Code shows the model
+a one-line `description` and reads the body only if the model asks for it. That
+is a context economy. Content that applies to every task has nothing to
+economise, and putting it in a skill only adds a chance the model declines it.
+
+`bank-case-handling` is on the wrong side of that line. It restates the
+briefing — verify before changing anything, search `/data/documents` for the
+procedure, reach operations through `bank_search` — so a model reading its
+description correctly concludes it already has that, and 18 rollouts of 24 did.
+See [docs/iterations/003](iterations/003-bank-case-handling-skill.md).
+
+The shape that earns a skill here is one procedure out of several, needed by
+some cases and not others: the gold actions across the 48 tasks use 35 distinct
+bank operations, and a case touches a handful. A description like "use when the
+customer disputes a transaction" is a trigger the model can match against the
+case notes. "Procedure for handling a customer case end to end" is not,
+because it is true of every case and therefore distinguishes none.
+
+---
+
 ## A skill worth writing for this domain
 
 Let the observed failures choose the content, and check first that they are the
@@ -115,28 +139,54 @@ measure is meaningless. The same boundary applies as to `prompt_prefix` in
 
 ## Testing a skill
 
-**1. Does it deploy?** Run one task with the skill on and check the agent
-mentions it or follows it. A skill that silently fails to deploy looks exactly
-like a skill that does not help.
+**1. Does it deploy, and does the agent open it?** These are two questions, and
+a score answers neither. A skill that fails to deploy, a skill the agent never
+opens, and a skill that does not help all produce the same pass rate.
 
 ```bash
-python tools/run_experiment.py --tasks tasks/task-036 \
+python tools/run_experiment.py --tasks tasks/task-036 --capture-provider \
   --skill-mode with-skill --experiment skills --note "smoke: does it deploy"
 ```
 
-A skill that silently fails to deploy and a skill that does not help look
-identical in the score. `total_skill_invocations` is logged on every run, so
-"the skill did not help" and "the agent never opened it" are different numbers
-rather than the same one; `benchflow eval view jobs/<run>` renders the
-trajectory as a page when you want to see how it was used.
+Claude Code puts the skill's `description` in the prompt and reads `SKILL.md`
+only when the model calls the `Skill` tool. Deploying a skill therefore makes
+it available, not used, and the gap can be most of the arm: the 2026-09-17
+with-skill arm offered `bank-case-handling` in 24 rollouts of 24 and had it
+opened in 6.
 
-**2. Does it help?** Both arms over the whole set, separate job directories:
+`tools/skill_uptake.py` is the measurement, and `run_experiment.py` logs it on
+every captured run:
+
+```bash
+python tools/skill_uptake.py jobs/<run> --skill bank-case-handling
+```
+
+| metric | reading |
+|---|---|
+| `skill_rollouts_offered` | 0 on a with-skill arm means it did not deploy |
+| `skill_load_rate` | offered but rarely opened: the arm is mostly a second baseline |
+| `skill_first_load_call_mean` | opened late means consulted when stuck, not followed as a procedure |
+
+Do not use `total_skill_invocations` for this. It counts ACP events with
+`kind == "skill"`, and Claude Code emits the load as `kind: "other"`, so it
+reads 0 however many times the skill was opened. Counting the ACP title
+`"Load skill"` instead is also wrong: on that same arm it found five of the six
+loads, because one rollout's ACP stream omitted a call the provider capture
+recorded. The capture is the only complete record, which is why this needs
+`--capture-provider`.
+
+`benchflow eval view jobs/<run>` renders a trajectory as a page when you want
+to see how the skill was used once you know it was.
+
+**2. Does it help?** Only worth running once step 1 shows a high load rate.
+Below that the with-skill arm is the baseline on every rollout that declined,
+and no number of tasks will separate the two.
 
 ```bash
 python tools/run_experiment.py --tasks tasks --skill-mode no-skill \
-  --experiment skills --note "baseline"
+  --capture-provider --experiment skills --note "baseline"
 python tools/run_experiment.py --tasks tasks --skill-mode with-skill \
-  --experiment skills --note "bank-case-handling"
+  --capture-provider --experiment skills --note "bank-case-handling"
 
 python tools/compare_arms.py \
   --baseline <baseline-mlflow-run-id> --treatment <skill-mlflow-run-id> \
@@ -170,6 +220,10 @@ observed delta collapse to the same number.
 **Check coverage before the delta.** Only tasks with a healthy scored rollout on
 both sides enter the paired metrics, so a crash in one arm silently drops that
 task from the comparison.
+
+**Check the load rate before the delta.** A delta is a statement about the
+rollouts where the skill was read. At a load rate of 0.25 that is a quarter of
+the arm, and the interval is wide for a reason no number of extra tasks fixes.
 
 ---
 

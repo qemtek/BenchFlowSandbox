@@ -91,9 +91,14 @@ The measurements that can carry a result:
 - `calls_per_gold_action` — step 3 should reduce it. `task-043` used 28 calls
   for 5 gold actions, six of them spent guessing tool names before its first
   search of the documentation.
-- `total_skill_invocations` — whether the skill was opened at all
-  (`tools/run_experiment.py:377`). Without it, "the skill did not help" and
-  "the agent never read it" are the same number.
+- `skill_load_rate` and `skill_first_load_call_mean` — whether the skill was
+  opened at all, and whether it was opened early enough to act as a procedure
+  (`tools/skill_uptake.py`). Without them, "the skill did not help" and "the
+  agent never read it" are the same number.
+
+  Written before the run as `total_skill_invocations`, which turned out to
+  measure nothing here; the uptake metrics replaced it afterwards and both arms
+  were backfilled. See below.
 
 ## How it is measured
 
@@ -154,8 +159,10 @@ in this project, so there is no longer an excuse for recording an alias.
    21 of 48 and still printed a pass rate. Anything below full coverage means
    the rest of the numbers describe a different experiment from the one
    intended.
-2. `total_skill_invocations` on the treatment arm. At zero the skill never
-   deployed and nothing else in the run bears on whether it works.
+2. `skill_rollouts_offered` and `skill_load_rate` on the treatment arm. At zero
+   offered the skill never deployed; at a low load rate it deployed and was
+   declined, and the arm is mostly a second baseline. Either way nothing else
+   in the run bears on whether the skill works.
 3. `compare_arms.py`, which refuses arms that did not ask the same questions
    and reports the interval rather than the point estimate.
 
@@ -205,9 +212,52 @@ judges the skill relevant. So 18 of 24 treatment rollouts ran with the skill
 present and unread. This is not a test of the skill; it is a test of offering
 one, and the pass-rate result above should be read as such.
 
+```
+skill_rollouts_offered      24
+skill_rollouts_opened        6
+skill_load_rate           0.25
+skill_first_load_call_mean 15.7   (max 24)
+```
+
+None of the six opened it at the start:
+
+```
+task-085  call 16 of 83      task-091  call 24 of 85
+task-087  call 14 of 53      task-092  call 16 of 68
+task-088  call 13 of 32      task-095  call 11 of 54
+```
+
+The skill is written as a procedure — step 1 is "list every distinct request
+before acting" — and every model that read it had been acting for at least
+eleven calls. So the six are not six tests of the skill either. They are six
+agents consulting a reference once already committed to an approach, which is
+a different intervention from the one the page proposed.
+
 In the 6 where it was read, neither arm passed anything, and calls per gold
 action moved the wrong way, 1.79 to 1.97. Six tasks, so that is an observation
 rather than a finding.
+
+### Why it was declined: the skill restates the briefing
+
+The uptake is not a quirk of the description's wording. The content was already
+in the prompt:
+
+| Briefing | Skill |
+|---|---|
+| "Verify the customer's identity and record it with `log_verification` before you change anything… 1. Look the customer up 2. Compare 3. Call `log_verification`" | 2. Verify before you change anything |
+| "policy live in the bank's internal documentation at `/data/documents`; search it and follow the procedure it describes" | 3. Find the documented procedure |
+| "`bank_search` → `bank_describe_operation` → `bank_call_operation`" | 4. Reach a specialised operation |
+
+A model reading *"Procedure for handling a Rho-Bank customer case end to end —
+reading every request, verifying identity, finding the documented procedure…"*
+against a briefing that already says all of that concludes there is nothing to
+fetch, and declines. On this reading the 18 refusals were correct, and the
+experiment was mis-specified rather than the agent mis-behaving.
+
+Only step 1, listing every distinct request before acting, is content the
+briefing does not carry — and it is general, so it belongs in the briefing too.
+That is iteration 006. What belongs in a skill is the content that applies to
+some cases and not others; see `docs/03-skills.md`.
 
 ### `total_skill_invocations` does not measure this
 
@@ -217,10 +267,19 @@ tell the reader to check that metric first and to treat zero as "the skill
 never deployed". On this evidence the metric does not count Claude Code skill
 reads, so zero means nothing either way.
 
-The check that does work is the provider capture: grep the skill body in
-`trajectory/llm_trajectory.jsonl`. Without `--capture-provider` that file does
-not exist, and the uptake problem would have been invisible — the arms would
-have looked like a clean null result.
+The cause is a shape mismatch: the counter takes ACP events with
+`kind == "skill"`, and Claude Code emits the load as
+`{"kind": "other", "title": "Load skill"}`.
+
+Counting that ACP title instead is also wrong. Doing so on this arm finds five
+of the six loads: `task-087` called the `Skill` tool and its ACP stream does not
+record it. The provider capture is the only complete record, so the measurement
+is `tools/skill_uptake.py`, which reads `Skill` tool calls out of
+`trajectory/llm_trajectory.jsonl` and is logged on every captured run. Both arms
+here were backfilled with it.
+
+Without `--capture-provider` none of this exists, and the uptake problem would
+have been invisible — the arms would have looked like a clean null result.
 
 ### A confound in the uptake, unresolved
 
@@ -234,19 +293,26 @@ straight through with no resume, which was not possible here.
 
 Nothing about whether the skill helps. Two things it does establish:
 
-- Uptake, not content, is the binding constraint. A skill read by a quarter of
-  rollouts cannot move a pass rate whatever it says, so the next question is
-  how to get it read — the briefing pointing at it, or `--skills-dir`, or a
-  skill whose description matches the cases better.
+- Uptake, not content, is the binding constraint, and the cause of the low
+  uptake is duplication rather than wording. A skill that restates the briefing
+  has nothing to offer a model that has already read the briefing. Getting it
+  read means writing a skill that carries content the prompt does not.
 - The no-skill arm is clean. The skill body appears in 0 of 24 baseline
   rollouts and the name in 0 of 24, so BenchFlow's stripping works as
   `docs/03-skills.md` claims: honest by construction.
 
 ## Verdict
 
-Inconclusive on the question asked, and it could not have been otherwise at
-this size. Recorded rather than retried, because retrying the same design would
-buy the same answer.
+Inconclusive on the question asked, and mis-specified besides. The skill was
+general content placed in a mechanism built for conditional content, so the
+agent was offered a procedure it already had and declined it 18 times out of
+24. Recorded rather than retried: retrying this design would buy the same
+answer.
+
+It splits into two successors. Step 1 is general, so it goes in the briefing
+(006, the prompt lever). Per-procedure skills are what the skills lever was
+for, and they need content the briefing does not carry (007, conditional on the
+knowledge base not already covering it).
 
 The next run worth paying for is not this one repeated. It is the noise floor:
 one arm, twice, unchanged. Six discordant tasks out of 24 with a zero net delta

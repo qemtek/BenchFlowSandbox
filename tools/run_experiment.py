@@ -47,6 +47,7 @@ import time
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
+import skill_uptake  # noqa: E402
 from provenance import (  # noqa: E402
     ProvenanceError,
     agent_harness,
@@ -213,6 +214,30 @@ def summarise(job_dir: pathlib.Path) -> dict:
             f"{job_dir} holds {len(runs)} evaluations; this wrapper owns one "
             f"job directory per run, so something else wrote here")
     return json.loads(runs[0].read_text())
+
+
+def skill_uptake_metrics(job_dir: pathlib.Path, tasks_path: pathlib.Path) -> dict:
+    """Whether the agent opened the skill it was offered, and when.
+
+    Offering a skill and using one are different events: Claude Code puts the
+    skill's description in the prompt and leaves the model to decide whether to
+    read the body. A with-skill arm where nothing opened the skill is a second
+    baseline, and scores alone cannot tell you that happened.
+
+    Counts only the skills the task bundle ships. The sandbox also advertises
+    the dozen Claude Code installs, and a load rate over those would be a
+    number about the agent rather than about the change under test.
+
+    Needs the provider capture, so a run without --capture-provider logs
+    nothing here rather than logging zeros that would read as "never opened".
+    """
+    names = skill_uptake.bundled_skill_names(tasks_path)
+    if not names:
+        return {}
+    rollouts = skill_uptake.read_job(job_dir, names)
+    if not rollouts:
+        return {}
+    return skill_uptake.summarise(rollouts)
 
 
 def health_metrics(job_dir: pathlib.Path) -> tuple[dict, bool]:
@@ -456,8 +481,10 @@ def log_cell(mlflow, cell_dir: pathlib.Path, tasks_path: pathlib.Path,
         # there is no price source, so total_cost_usd is 0.0 meaning
         # "unpriced" rather than "free" — indistinguishable without this.
         "telemetry_coverage": summary.get("telemetry_coverage") or 0.0,
-        # Whether the skill was opened at all. Without it, "the skill did not
-        # help" and "the agent never read it" are the same number.
+        # Kept for continuity with earlier runs. It reads 0 however many
+        # times a skill was opened, because it counts ACP events with
+        # kind == "skill" and Claude Code emits kind == "other". The usable
+        # numbers come from skill_uptake below.
         "total_skill_invocations": summary.get("total_skill_invocations") or 0,
     }
     passed = metrics["passed"]
@@ -469,6 +496,7 @@ def log_cell(mlflow, cell_dir: pathlib.Path, tasks_path: pathlib.Path,
 
     health, complete = health_metrics(cell_dir)
     metrics.update(health)
+    metrics.update(skill_uptake_metrics(cell_dir, tasks_path))
 
     priced = metrics["total_cost_usd"] > 0
     mlflow.set_tags({
