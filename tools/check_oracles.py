@@ -62,6 +62,37 @@ def undocumented_opaque_arguments(pkg: pathlib.Path) -> list[str]:
     return found
 
 
+def unreachable_identity(pkg: pathlib.Path) -> list[str]:
+    """Gold identity fields the agent has no way to obtain.
+
+    `log_verification` records a customer without checking the users table, so
+    the oracle replays it happily on a task whose customer is not in the seed —
+    and then every later action that needs the `user_id` fails for the agent
+    while the oracle sails through, because the oracle was handed the value.
+    That is how 18 of 48 tasks ran for months as unsolvable: the customer is
+    introduced by the task's `initial_state`, and `make_task.py` was not
+    applying it.
+
+    An agent reaches a `user_id` by looking the customer up, so the check is
+    whether the id exists in this task's own seed. task-005 is the exception
+    the `or` clause covers: its value is a supervisor bypass code the customer
+    reads out, so the case notes are a legitimate source for it.
+    """
+    gold = json.loads((pkg / "verifier" / "gold.json").read_text())
+    users = json.loads(
+        (pkg / "verifier" / "db.seed.json").read_text()
+    ).get("users", {}).get("data", {})
+    notes = (pkg / "task.md").read_text()
+    missing = []
+    for action in gold:
+        if action.get("name") != "log_verification":
+            continue
+        user_id = (action.get("arguments") or {}).get("user_id")
+        if user_id and user_id not in users and user_id not in notes:
+            missing.append(f"log_verification.user_id={user_id}")
+    return missing
+
+
 def run_oracle(pkg: pathlib.Path, workdir: pathlib.Path) -> list[str]:
     """Replay the oracle's actions through the MCP surface, returning failures.
 
@@ -200,7 +231,8 @@ def main() -> int:
         match = report.get("db_match") is True
         gold_problems = report.get("gold_replay_problems") or []
         sentinels = undocumented_opaque_arguments(pkg)
-        if match and not gold_problems and not sentinels:
+        unreachable = unreachable_identity(pkg)
+        if match and not gold_problems and not sentinels and not unreachable:
             ok.append(pkg.name)
             print(f"  PASS  {pkg.name}")
         else:
@@ -208,6 +240,9 @@ def main() -> int:
                 reason = "gold unsatisfiable: " + "; ".join(gold_problems)[:160]
             elif sentinels:
                 reason = "gold uses undocumented opaque arguments: " + "; ".join(sentinels)[:160]
+            elif unreachable:
+                reason = ("customer unreachable from this task's seed: "
+                          + "; ".join(unreachable)[:160])
             else:
                 reason = "oracle does not reach gold"
             broken.append((pkg.name, reason, cli_failures))

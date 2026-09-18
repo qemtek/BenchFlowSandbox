@@ -281,13 +281,27 @@ here were backfilled with it.
 Without `--capture-provider` none of this exists, and the uptake problem would
 have been invisible — the arms would have looked like a clean null result.
 
-### A confound in the uptake, unresolved
+### The confound, resolved by 007
 
-Five of the six that loaded the skill were in the batch replayed by `--resume`,
-which also ran at a later commit and lower concurrency. The loaders are also
-much larger tasks: mean 17.5 gold actions against 9.7 for the rest. Those two
-explanations cannot be separated from this run. Deciding it needs one arm run
-straight through with no resume, which was not possible here.
+This page originally offered two explanations for which rollouts opened the
+skill: five of the six were in the batch replayed by `--resume`, and the
+loaders were larger tasks. Both are wrong.
+
+[007](007-per-task-starting-state.md) found that 7 of these 24 tasks were
+unsolvable — the customer to be verified was absent from the task's own seed
+database, so there was no route to a `user_id`.
+
+```
+skill opened:  6 of the 7 unsolvable tasks
+               0 of the 17 solvable tasks
+```
+
+The model opened the skill when it was stuck with no way forward. The load rate
+of 0.25 measured how many tasks were broken, not how many made the skill look
+relevant.
+
+It also changes the scores on this page. Both arms passed 3, read here as 3 of
+24. Against a reachable denominator it is 3 of 17.
 
 ### What this licenses
 

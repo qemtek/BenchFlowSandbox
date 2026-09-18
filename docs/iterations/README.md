@@ -20,6 +20,7 @@ was changed, and what happened.
 | 004 | [Recording which briefing produced a task set](004-briefing-provenance.md) | superseded by 005 |
 | 005 | [The briefing moves into MLflow's prompt registry](005-briefing-in-the-prompt-registry.md) | landed |
 | 006 | [Listing every request moves into the briefing](006-every-request-in-the-briefing.md) | applied, awaiting runs |
+| 007 | [Each task's own starting state reaches the database](007-per-task-starting-state.md) | landed |
 
 ---
 

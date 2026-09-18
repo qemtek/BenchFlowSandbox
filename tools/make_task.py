@@ -663,6 +663,49 @@ def oracle(task: dict) -> str:
     )
 
 
+def seed_database(task: dict) -> dict:
+    """The shared bank, with this task's own starting situation applied.
+
+    The 39 users in `db.json` are the bank's population; 24 of them appear in
+    no task at all and exist so that looking a customer up by name has to
+    discriminate rather than pick the only record. What a task adds on top is
+    not a person but a situation: the dispute already on file, the pending
+    limit request, the frozen card. Those conflict between tasks — four tasks
+    use Yuki Nakamura and only one of them wants a dispute already filed — so
+    they cannot live in the shared file and are staged per task instead.
+
+    Skipping this step leaves 18 of the 48 tasks unsolvable: their customer is
+    introduced by the overlay, so without it the agent looks up a name that is
+    not there, cannot reach a `user_id`, and cannot call `log_verification` or
+    anything downstream of it. Nothing catches that. `log_verification` writes
+    whatever it is handed without checking the users table, so an oracle
+    replaying the reference actions succeeds on a task no agent can start.
+
+    `initialization_data.user_data` is deliberately not applied: it belongs to
+    the user simulator, and these tasks are single-turn with the conversation
+    already recorded in the case notes. `initialization_actions` is empty in
+    all 97 task definitions.
+    """
+    db = json.loads((TAU2_DATA / "db.json").read_text())
+    # Every level here is present-but-null in some task definition, so each
+    # step falls back to {} rather than chaining .get on a None.
+    init = task.get("initial_state") or {}
+    overlay = (init.get("initialization_data") or {}).get("agent_data") or {}
+    for table, content in overlay.items():
+        rows = (content or {}).get("data") or {}
+        # A table the overlay introduces is real, not a typo:
+        # `debit_card_disputes` and `task_config` are declared in the domain's
+        # data model and absent from the shared file only because no base user
+        # has one.
+        # `notes` is a plain str in the domain's DatabaseTable, not optional,
+        # so a table created here starts with "" — None fails validation and
+        # takes the whole database down with it.
+        db.setdefault(table, {"data": {}, "notes": ""})
+        db[table].setdefault("data", {})
+        db[table]["data"].update(rows)
+    return db
+
+
 def generate(task_id: str, out_root: pathlib.Path,
              brief_text: str, brief_uri: str) -> None:
     task = json.loads((TAU2_DATA / "tasks" / (task_id + ".json")).read_text())
@@ -682,7 +725,9 @@ def generate(task_id: str, out_root: pathlib.Path,
     (pkg / "verifier" / "gold.json").write_text(
         json.dumps(task["evaluation_criteria"]["actions"], indent=2)
     )
-    shutil.copy(TAU2_DATA / "db.json", pkg / "verifier" / "db.seed.json")
+    (pkg / "verifier" / "db.seed.json").write_text(
+        json.dumps(seed_database(task), indent=1)
+    )
     # Pick the verifier by how the task is scored. DB tasks compare end state;
     # ACTION tasks read the tool-call log, because their correct outcome may
     # leave the database unchanged.

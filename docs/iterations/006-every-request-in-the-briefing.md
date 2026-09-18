@@ -43,9 +43,8 @@ Register the result as `bank-briefing` version 2 and regenerate the 48 task
 packages against it, so every task records `briefing_prompt_uri:
 prompts:/bank-briefing/2`.
 
-Nothing else changes. `bank-case-handling` stays as it is for now: it is
-superseded by [007](007-per-procedure-skills.md) rather than by this page, and
-deleting it here would put two changes in one comparison.
+Nothing else changes. `bank-case-handling` stays as it is for now — deleting it
+here would put two changes in one comparison.
 
 ## Baseline
 
@@ -120,6 +119,10 @@ still not been done. Until it has, a result here that clears the floor is
 suggestive rather than settled.
 
 ## Result
+
+The baseline named above is void. [007](007-per-task-starting-state.md) found
+that 7 of these 24 tasks were unsolvable when `fea7eb97` ran, so this
+comparison needs two fresh arms rather than one.
 
 Applied 2026-09-18. `prompts:/bank-briefing/2` registered
 (`0a77af1898ce`), all 48 task packages regenerated against it, oracle gate
