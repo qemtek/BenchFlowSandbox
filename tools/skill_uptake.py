@@ -164,6 +164,43 @@ def main() -> None:
         print(f"  {key}: {value}")
 
 
+def sampling_settings(job_dir: Path) -> dict:
+    """What the agent was actually configured to do, read off the wire.
+
+    `--reasoning-effort` is a request to the harness, and when it is not passed
+    the run records "harness-default", which says what we did not set rather
+    than what happened. The harness's default is not mild: it enables extended
+    thinking with a budget of 63999 against a 64000 `max_tokens`, so a run that
+    looks unconfigured is in fact running at close to maximum reasoning.
+
+    Comparing two arms at different thinking budgets would be comparing two
+    agents, so the value belongs beside the pass rate. It is taken from the
+    first captured request, which is the request as the provider received it.
+    """
+    trajectory = next(job_dir.rglob("llm_trajectory.jsonl"), None)
+    if trajectory is None:
+        return {}
+    for line in trajectory.open():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        body = (record.get("request") or {}).get("body") or {}
+        thinking = body.get("thinking") or {}
+        out = {
+            "provider_model": record.get("provider_model") or "unknown",
+            "max_tokens": body.get("max_tokens"),
+            "thinking": thinking.get("type") or "absent",
+            "thinking_budget_tokens": thinking.get("budget_tokens"),
+            "temperature": body.get("temperature"),
+            "top_p": body.get("top_p"),
+            "top_k": body.get("top_k"),
+        }
+        # A key the provider was never sent is "unset", not None: the two look
+        # the same in MLflow and mean different things.
+        return {k: ("unset" if v is None else v) for k, v in out.items()}
+    return {}
+
+
 def bundled_skill_names(tasks_path: Path) -> set[str]:
     """Skill names a task bundle ships, from the directory names on disk.
 

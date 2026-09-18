@@ -1,13 +1,38 @@
 # Statistical power
 
-Power is the chance that an experiment finds an effect that is really there. An
-experiment with 40% power will miss a genuine improvement three times in five,
-and report it as a difference too small to distinguish from chance.
+Power is the chance that an experiment finds an effect that is really there.
 
-Power is the counterpart to the false alarm rate. The 95% interval controls how
-often you claim an improvement that does not exist, and that rate is fixed at
-one in twenty by the threshold you chose. Power is about the other mistake,
-missing one that does, and nothing fixes it for you.
+Every comparison ends in one of two verdicts, and the change being tested either
+works or it does not. That makes four outcomes, two of which are mistakes:
+
+```
+                       you declare a result     you do not
+
+change does nothing       false alarm            correct
+change works              correct                miss
+```
+
+The p-value guards the top row. Power guards the bottom one.
+
+**A p-value is worked out after the run, from the results you got.** It answers
+one question: if the change did nothing, how often would a comparison come out
+looking like this one? Declaring a result only when that figure falls below 0.05
+holds the false alarm rate at one in twenty. You pick the threshold, and it
+holds whatever the size of the task set.
+
+**Power is worked out before the run, from an effect size you name.** It answers
+a different question: if the change really does improve the pass rate by 10
+points, how often would this experiment notice? An experiment with 40% power
+misses a genuine 10-point gain three times in five, and reports it as a
+difference too small to distinguish from chance.
+
+The difference in one line: a p-value asks whether the result you are holding
+could be chance, and power asks whether you would have seen the effect at all if
+it had been there.
+
+The rest of this page is about power, because the false alarm rate comes fixed
+at one in twenty and power does not come with the experiment. It has to be
+bought with tasks.
 
 Figures come from `python docs/learnings/scripts/power_simulation.py`, which
 simulates comparisons with a known true effect and counts how often the reported
@@ -69,11 +94,35 @@ that 0.84 is what this page is about.
 
 ---
 
-## Findings are larger than the effects behind them
+## A weak experiment overstates the gains it finds
 
-An experiment that misses half of what it is looking for does not miss at
-random. It misses the runs where the effect happened to look small, and reports
-the runs where it happened to look large.
+Take a change that genuinely improves the pass rate by 10 points, and run the
+comparison 20,000 times on fresh 48-task sets. Noise makes the measured gain
+different every time: some runs land near 4 points, others near 16.
+
+```
+every run                   mean  10.0pp   (20000 runs)
+runs that cleared           mean  13.8pp   (9240 runs)
+runs written up as unclear  mean   6.6pp   (10760 runs)
+smallest gain that cleared         8.3pp
+```
+
+Averaged over everything, the measurement is right: 10.0 points against a true
+10. Nothing is broken in any individual run.
+
+The trouble is that you never see the whole column. You see one run, and you only
+call it a result if its interval cleared zero.
+
+The last line is the mechanism. No run measuring below 8.3 points ever cleared,
+because a gap that small cannot hold an interval away from zero on 48 tasks. So
+the runs that reached publication were picked for being on the large side, and
+their mean is 13.8 rather than 10. The runs that measured the effect accurately
+at 6 or 7 points were the ones written up as "could not tell".
+
+The selection is done by the threshold, on the measurement itself, before you
+decide what to believe.
+
+### How much it costs, by effect size
 
 ```
 true gain    6pp   found 23.4%   reported  11.2pp   overstated by 1.87x
@@ -82,34 +131,38 @@ true gain   20pp   found 86.5%   reported  21.4pp   overstated by 1.07x
 true gain   30pp   found 98.9%   reported  30.2pp   overstated by 1.01x
 ```
 
-The middle rows are the ones to sit with. When a true 10-point gain is found, it
-is reported at 13.9 points on average, because a run that measured it at 7
-points did not clear the threshold and was written up as "could not tell". The
-selection happens before you see the number.
+The distortion tracks the power. At 6 points, where three runs in four are
+discarded, a genuine 6-point improvement is published as an 11-point one. At 30
+points almost nothing is discarded, so the survivors are nearly the whole column
+and the reported figure is the true one.
 
-At 6 points the reporting is worse than the effect is large: a genuine 6-point
-improvement, on the occasions it gets through, is published as an 11-point one.
+Exaggeration is therefore a symptom of low power rather than a separate problem.
+Buying power fixes both.
 
-At the bottom of the table the distortion disappears. An effect large enough to
-be found almost every time is found at close to its true size, because almost
-nothing is being filtered out.
+### Rerun the winner
 
-So the exaggeration is a symptom of low power rather than a separate problem.
-Fixing the power fixes it.
+Say a comparison came out at +14 points and cleared the threshold. The table
+above says the effect behind a reported 14 is more likely to be around 10.
 
-### What follows for a result you intend to act on
+Now run the same comparison again on a fresh set of tasks. The second number
+does not carry the same distortion, and the reason is worth being precise about.
+The first number reached you only because it was large enough to clear the
+threshold; small measurements of the same effect never got that far. The second
+number reaches you whatever it says, because you have already committed to
+running it and looking. Nothing filters it, so it lands around the true value
+instead of above it.
 
-Rerun the winner. A comparison that has already cleared the threshold once gives
-an inflated estimate of the gain; the rerun does not, because it is not being
-selected on. The first run establishes the direction, the second measures the
-size.
+That commitment is the whole mechanism. Rerunning until one of the attempts
+looks good is the original filter applied again, and gives back an inflated
+number for the same reason the first one was inflated.
 
-Expect the rerun to come in smaller, and treat that as the arithmetic working
-rather than as the effect evaporating.
+So the first run settles the direction and the second measures the size. Expect
+the second to come in lower, and read that as the arithmetic behaving rather
+than the effect evaporating.
 
 ---
 
-## Findings pointing the wrong way
+## Small effects can be found with the sign reversed
 
 Below a certain size, an experiment can find an effect and get its direction
 wrong:
@@ -137,10 +190,32 @@ Three things move it, in descending order of how much control you have.
 **More tasks.** The table above prices this: 48 to 192 tasks takes a 10-point
 gain from 46% to 98%. It is the only lever that works on any effect size.
 
-**Pairing.** Running both arms over the same tasks, and comparing task by task,
-removes task difficulty from the variance at no cost.
-[Page 02](02-paired-comparison.md) covers it, and it is already how
-`compare-lift` works.
+**Pairing.** Running both arms over the same tasks and comparing them task by
+task. This does not change the gain you measure. It changes the uncertainty
+around it, by cancelling the part that comes from some tasks being harder than
+others: a task's difficulty sits in both arms' results, so subtracting one from
+the other removes it.
+
+[Page 02](02-paired-comparison.md) measures both ways of reading identical runs:
+
+```
+compared task by task        standard error  3.67pp
+compared by overall rate     standard error  9.88pp
+```
+
+Power is decided by how far the true effect sits above that standard error, so
+cutting it by a factor of 2.7 does the same work as running a much larger task
+set. The standard error falls with the square root of the task count, so buying
+the same reduction with tasks alone would take:
+
+```
+2.7² = 7.3       48 × 7.3 ≈ 350 tasks
+```
+
+A paired comparison on 48 tasks reaches roughly what an unpaired one would need
+350 tasks for. This is a saving you already hold rather than one to go and
+collect: `compare-lift` pairs by task, which is why the middle row of the first
+table on this page reads 46% and not something far worse.
 
 **Repeat runs.** Running each arm several times and averaging reduces the part
 of the variance that comes from the agent behaving differently between runs.

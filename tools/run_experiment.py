@@ -498,6 +498,11 @@ def log_cell(mlflow, cell_dir: pathlib.Path, tasks_path: pathlib.Path,
         # Efficiency: how many tool calls per action the task actually needed.
         metrics["calls_per_gold_action"] = tool_calls / golds
 
+    # Read off the wire rather than from what we asked for: the harness's
+    # defaults are not visible any other way.
+    log_params_once(mlflow, mlflow.active_run().info.run_id,
+                    skill_uptake.sampling_settings(cell_dir))
+
     health, complete = health_metrics(cell_dir)
     metrics.update(health)
     metrics.update(skill_uptake_metrics(cell_dir, tasks_path))

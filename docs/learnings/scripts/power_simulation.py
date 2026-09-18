@@ -96,6 +96,26 @@ def exaggeration() -> None:
               f"overstated by {ratio:.2f}x")
 
 
+def selection_demo() -> None:
+    """Why the survivors are the large ones: the threshold cuts on the measurement."""
+    rng = random.Random(47)
+    tasks, effect, runs = 48, 0.10, 20000
+    cleared, missed = [], []
+    for _ in range(runs):
+        wins, losses = experiment(rng, tasks, effect)
+        delta = (wins - losses) / tasks
+        (cleared if found(tasks, wins, losses) else missed).append(delta)
+    every = cleared + missed
+    print("\nE. A true 10-point gain, run 20,000 times on 48 tasks")
+    print(f"   every run                   mean {statistics.mean(every) * 100:5.1f}pp"
+          f"   ({len(every)} runs)")
+    print(f"   runs that cleared           mean {statistics.mean(cleared) * 100:5.1f}pp"
+          f"   ({len(cleared)} runs)")
+    print(f"   runs written up as unclear  mean {statistics.mean(missed) * 100:5.1f}pp"
+          f"   ({len(missed)} runs)")
+    print(f"   smallest gain that cleared       {min(cleared) * 100:5.1f}pp")
+
+
 def wrong_direction() -> None:
     print("\nD. Findings pointing the wrong way, 48 tasks")
     for effect in (0.02, 0.04, 0.10):
@@ -108,4 +128,5 @@ if __name__ == "__main__":
     power_by_effect()
     power_by_tasks()
     exaggeration()
+    selection_demo()
     wrong_direction()
