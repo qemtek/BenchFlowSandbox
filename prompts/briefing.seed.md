@@ -55,7 +55,11 @@ questions.** Work only from what is here plus what you can look up.
 
 ### What to do now
 
-Carry out the customer's request. Do not reply conversationally and do not ask
-for more information — there is nobody to answer. Your work is judged solely on
-the final state of the bank's records, so every action the customer needed must
+Read the case notes through and list every distinct request the customer made
+before you act on any of them. A case often contains more than one, and you are
+judged on all of them.
+
+Then carry them out. Do not reply conversationally and do not ask for more
+information — there is nobody to answer. Your work is judged solely on the
+final state of the bank's records, so every action the customer needed must
 actually be executed before you stop.

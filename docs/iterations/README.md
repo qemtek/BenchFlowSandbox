@@ -19,6 +19,7 @@ was changed, and what happened.
 | 003 | [A procedural skill, aimed at the four remaining failures](003-bank-case-handling-skill.md) | measured, mis-specified |
 | 004 | [Recording which briefing produced a task set](004-briefing-provenance.md) | superseded by 005 |
 | 005 | [The briefing moves into MLflow's prompt registry](005-briefing-in-the-prompt-registry.md) | landed |
+| 006 | [Listing every request moves into the briefing](006-every-request-in-the-briefing.md) | applied, awaiting runs |
 
 ---
 

@@ -9,7 +9,7 @@ schema_version: '1.3'
 task:
   name: bank/task-036
 metadata:
-  briefing_prompt_uri: prompts:/bank-briefing/1
+  briefing_prompt_uri: prompts:/bank-briefing/2
   domain: banking_knowledge
   source_task_id: task_036
   reward_basis: DB
@@ -116,7 +116,11 @@ What the customer said during the call:
 
 ### What to do now
 
-Carry out the customer's request. Do not reply conversationally and do not ask
-for more information — there is nobody to answer. Your work is judged solely on
-the final state of the bank's records, so every action the customer needed must
+Read the case notes through and list every distinct request the customer made
+before you act on any of them. A case often contains more than one, and you are
+judged on all of them.
+
+Then carry them out. Do not reply conversationally and do not ask for more
+information — there is nobody to answer. Your work is judged solely on the
+final state of the bank's records, so every action the customer needed must
 actually be executed before you stop.

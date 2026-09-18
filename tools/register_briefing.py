@@ -89,12 +89,16 @@ def main() -> int:
                   f"{v.commit_message or ''}")
         return 0
 
-    if not args.from_file.is_file():
+    # Resolved before use: the tag below records the path relative to the
+    # repository, and a briefing passed as `prompts/briefing.seed.md` from the
+    # repository root is not relative to an absolute REPO until it is.
+    source = args.from_file.resolve()
+    if not source.is_file():
         raise SystemExit(f"no such file: {args.from_file}")
-    text = args.from_file.read_text()
+    text = source.read_text()
     if "{{scenario}}" not in text:
         raise SystemExit(
-            f"{args.from_file} has no {{{{scenario}}}} placeholder.\n"
+            f"{source} has no {{{{scenario}}}} placeholder.\n"
             "make_task.py substitutes the case notes there, so a briefing "
             "without it would give every task the same empty case."
         )
@@ -104,11 +108,11 @@ def main() -> int:
         print(f"already registered, unchanged: prompts:/{PROMPT_NAME}/{found.version}")
         return 0
 
-    message = args.message or f"imported from {args.from_file.name}"
+    message = args.message or f"imported from {source.name}"
     version = mlflow.genai.register_prompt(
         name=PROMPT_NAME, template=text, commit_message=message,
         tags={"sha256": hashlib.sha256(text.encode()).hexdigest(),
-              "imported_from": str(args.from_file.relative_to(REPO))},
+              "imported_from": str(source.relative_to(REPO))},
     )
     print(f"registered {version.uri}")
     print(f"generate against it with:\n"
