@@ -691,6 +691,7 @@ tools/
   run_experiment.py     tracked runs
   compare_arms.py       records a paired comparison, and guards what it compares
   skill_uptake.py       whether the agent opened the skill it was offered
+  task_families.py      which tasks a per-procedure skill could affect
   provenance.py         digests, git state, harness and host pins
   capture_proxy.py      provider-side capture for subscription runs
   document_tools.py     regenerates docs/tools.md

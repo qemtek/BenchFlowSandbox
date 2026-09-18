@@ -69,6 +69,36 @@ customer disputes a transaction" is a trigger the model can match against the
 case notes. "Procedure for handling a customer case end to end" is not,
 because it is true of every case and therefore distinguishes none.
 
+### Measure a procedure skill on the tasks it could affect
+
+A skill about disputes cannot change a task that never files one, so those
+tasks contribute no effect and the agent's full run-to-run noise. Four flips
+read as +23.5pp on the 17 dispute tasks against a standard error near 6.2pp,
+and as +8.3pp on all 48 against 3.67pp — fewer tasks, stronger signal.
+
+`tools/task_families.py` labels each task from the operations in its own
+`verifier/gold.json`, so the subset is a property of the tasks rather than a
+choice made after seeing a result:
+
+```
+family             tasks   share   testable
+disputes              17    35%   yes
+card-lifecycle        21    44%   yes
+limit-increases        5    10%   no (under 8)
+open-close            10    21%   yes
+credits                9    19%   yes
+```
+
+```bash
+python tools/run_experiment.py --tasks tasks --skill-mode with-skill \
+  $(python tools/task_families.py --family disputes --include-flags) …
+```
+
+Fix the subset before the run. Choosing "the dispute tasks" after seeing where
+a skill helped selects on the outcome. `limit-increases` has five tasks, which
+is below anything a paired interval can resolve; fold it into a larger skill or
+accept it cannot be measured here.
+
 ---
 
 ## A skill worth writing for this domain
