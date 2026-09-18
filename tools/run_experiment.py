@@ -546,6 +546,34 @@ def log_cell(mlflow, cell_dir: pathlib.Path, tasks_path: pathlib.Path,
     return metrics
 
 
+def matrix_cells(jobs_dir: pathlib.Path) -> list[dict]:
+    """The trial directories a repeated arm produced.
+
+    BenchFlow writes `matrix-summary.json` after the last trial, and a run that
+    ends without it — the 2026-09-18 noise floor did, with both trials complete
+    on disk — left this wrapper logging nothing at all. The directories are the
+    record; the summary is an index of them. So read the index when it exists
+    and fall back to the layout, which BenchFlow names `<alias>/trial-NN`.
+    """
+    cells = read_json(jobs_dir / "matrix-summary.json").get("runs") or []
+    if cells:
+        return cells
+    found = []
+    for trial_dir in sorted(jobs_dir.glob("*/trial-*")):
+        if not (trial_dir / "summary.json").is_file():
+            continue
+        number = trial_dir.name.rsplit("-", 1)[-1]
+        if not number.isdigit():
+            continue
+        found.append({"alias": trial_dir.parent.name,
+                      "trial": int(number),
+                      "jobs_dir": str(trial_dir)})
+    if found:
+        print(f"  no matrix summary; recovered {len(found)} trial(s) "
+              "from the job directory", file=sys.stderr)
+    return found
+
+
 def log_trials(mlflow, jobs_dir: pathlib.Path, tasks_path: pathlib.Path,
                args, golds: int, elapsed: float, prov: dict, parent) -> dict:
     """One nested run per trial, and the spread across them on the parent.
@@ -556,10 +584,10 @@ def log_trials(mlflow, jobs_dir: pathlib.Path, tasks_path: pathlib.Path,
     second, which is what tells you whether a delta between two arms is a
     difference or a coin toss.
     """
-    matrix = read_json(jobs_dir / "matrix-summary.json")
-    cells = matrix.get("runs", [])
+    cells = matrix_cells(jobs_dir)
     if not cells:
-        print("  no matrix summary; trials did not run", file=sys.stderr)
+        print("  no trial directories under " + rel_to_repo(jobs_dir)
+              + "; trials did not run", file=sys.stderr)
         return {}
     # The run-wide files live at the matrix root rather than in any cell, so
     # the parent carries them; the per-cell ones hang off each nested run.

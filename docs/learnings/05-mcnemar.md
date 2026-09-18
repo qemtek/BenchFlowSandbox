@@ -15,9 +15,12 @@ Figures come from `python docs/learnings/scripts/mcnemar_simulation.py`.
 
 ## The four groups a paired comparison makes
 
-Both arms run the same 48 tasks, so every task falls into one of four groups.
-Take a comparison where the baseline passed 29 tasks and the treatment passed
-33:
+Both arms run over the same tasks, so every task falls into one of four groups.
+The examples on this page use a set of 48 tasks; nothing depends on that number
+except the sizes of the gaps it produces.
+
+Take a comparison in which the baseline passed 29 of the 48 and the treatment
+passed 33:
 
 ```
 both passed               28
@@ -121,8 +124,7 @@ there was no case where McNemar called a difference real and the interval did
 not. The test is the stricter of the two everywhere.
 
 Strictness is a trade, and the simulation prices it. Each row is 20,000
-experiments on 48 tasks, counting how often each method called the difference
-real:
+experiments, counting how often each method called the difference real:
 
 ```
                         interval says real    McNemar says real

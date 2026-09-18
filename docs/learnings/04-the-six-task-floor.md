@@ -151,8 +151,9 @@ Significance answers "is the direction real". It says nothing about size, and
 the two questions come apart in both directions:
 
 ```
-6 of 1000 tasks    real, and far too small to act on
-14 of 48 tasks     large, and could still be chance if 6 went the other way
+6 tasks of 1000 changing hands     real, and far too small to act on
+14 tasks of 48 changing hands      large, and could still be chance if 6
+                                   of them went the other way
 ```
 
 So the floor is a filter rather than a verdict. Below it, stop; the comparison

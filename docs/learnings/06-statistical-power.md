@@ -42,6 +42,10 @@ interval excludes zero.
 
 ## Power at 48 tasks
 
+Every figure in this section is for a set of 48 tasks. Nothing about that number
+is special: it is the size these pages use as their worked example, and the
+comparisons below are simulated against a change whose true size is known.
+
 ```
 true gain    2pp    found  5.0%
 true gain    4pp    found 13.0%
@@ -53,8 +57,8 @@ true gain   30pp    found 98.8%
 ```
 
 Read the middle row first. A change that genuinely improves the pass rate by 10
-percentage points, which is about five tasks in 48, gets reported as a difference
-under half the time. Run that comparison twice and the likelier outcome is that
+percentage points, which is about five of the 48 tasks changing hands, gets
+reported as a difference under half the time. Run that comparison twice and the likelier outcome is that
 at least one of the two runs says "could not tell".
 
 The top row is the floor. A 2-point true gain is found 5.0% of the time, and two

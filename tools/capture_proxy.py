@@ -335,6 +335,12 @@ def _request_text(row: dict) -> str:
     return " ".join(" ".join(parts).split())
 
 
+def _as_aware(value: object) -> datetime:
+    """Parse a timestamp, reading a naive one as the host's local time."""
+    parsed = datetime.fromisoformat(str(value))
+    return parsed.astimezone() if parsed.tzinfo is None else parsed
+
+
 def _within_window(row: dict, rollout_dir: pathlib.Path) -> bool:
     """Fallback attribution: did this call happen during that rollout?"""
     result_file = rollout_dir / "result.json"
@@ -342,8 +348,13 @@ def _within_window(row: dict, rollout_dir: pathlib.Path) -> bool:
         return False
     try:
         result = json.loads(result_file.read_text())
-        started = datetime.fromisoformat(str(result["started_at"])).replace(tzinfo=UTC)
-        finished = datetime.fromisoformat(str(result["finished_at"])).replace(tzinfo=UTC)
+        # BenchFlow writes these naive, in the host's local time, while the
+        # proxy stamps each call in UTC. Reading the naive values as UTC put
+        # every window an hour out under BST and silently produced no match at
+        # all. `astimezone()` on a naive datetime reads it as local, which is
+        # what it is.
+        started = _as_aware(result["started_at"])
+        finished = _as_aware(result["finished_at"])
         when = datetime.fromisoformat(row["start_time"])
     except (ValueError, KeyError, TypeError):
         return False
@@ -373,6 +384,13 @@ def attribute(capture_path: pathlib.Path, job_dir: pathlib.Path) -> int:
     for index, row in enumerate(rows):
         text = _request_text(row)
         hits = [r for r in rollouts if keys[r] and keys[r] in text]
+        if len(hits) > 1:
+            # A repeated arm (`--trials N`) runs every task N times, so the
+            # case notes no longer identify one rollout: the same block is
+            # echoed by each repeat. Content narrows the call to one task and
+            # the clock picks the repeat, which is sound because BenchFlow runs
+            # trials in sequence — their windows do not overlap.
+            hits = [r for r in hits if _within_window(row, r)]
         if len(hits) != 1:
             windowed = [r for r in rollouts if _within_window(row, r)]
             hits = windowed if len(windowed) == 1 else []
