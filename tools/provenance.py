@@ -267,6 +267,58 @@ def agent_harness(agent: str) -> str:
     return pin
 
 
+def harness_runtime(agent: str) -> dict:
+    """Where BenchFlow installs an agent's Node runtime, and which versions.
+
+    BenchFlow bootstraps the runtime inside every rollout: it downloads a Node
+    tarball and npm-installs the agent package. Both steps are guarded on the
+    target path already existing, so an image that ships them turns the whole
+    install into a no-op and takes the network out of the rollout path. That
+    is worth doing — six containers fetching Node at once exhausted the local
+    resolver on 2026-09-18 and cost a rollout.
+
+    Baking a version means the image can disagree with the registry after a
+    BenchFlow upgrade, and `agent_harness()` reads the registry, so the run
+    would record a version it did not use. Reading both from the same source
+    here is what keeps them honest; `run_experiment.py` compares them.
+
+    Private-API call, like `agent_harness()`: it raises rather than guessing,
+    because a wrong path silently restores the per-rollout download.
+    """
+    interp = benchflow_python()
+    proc = subprocess.run([interp, "-c", _RUNTIME_PROBE, agent],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise ProvenanceError(
+            f"runtime probe failed for {agent!r}: {proc.stderr.strip()}")
+    out = json.loads(proc.stdout)
+    missing = [k for k, v in out.items() if not v]
+    if missing:
+        raise ProvenanceError(
+            f"BenchFlow's agent registry no longer exposes {', '.join(missing)}")
+    return out
+
+
+# Runs inside BenchFlow's interpreter. Prints the install paths and pinned
+# versions the agent's bootstrap uses, as JSON.
+_RUNTIME_PROBE = """
+import json, re, sys
+from benchflow.agents import registry as r
+from benchflow.agents.registry import AGENTS, resolve_agent_key
+cfg = AGENTS[resolve_agent_key(sys.argv[1])]
+node = re.search(r"BF_NODE_VERSION=([0-9][0-9A-Za-z.+-]*)", r._NODE_INSTALL)
+pkg = re.search(r"npm install -g --prefix \\S+ (\\S+)", cfg.install_cmd or "")
+print(json.dumps({
+    "node_version": node.group(1) if node else "",
+    "node_prefix": r._BENCHFLOW_NODE_PREFIX,
+    "js_agent_prefix": r._BENCHFLOW_JS_AGENT_PREFIX,
+    "bin_prefix": r._BENCHFLOW_BIN_PREFIX,
+    "agent_package": pkg.group(1) if pkg else "",
+    "agent_binary": sys.argv[1],
+}))
+"""
+
+
 # Runs inside BenchFlow's interpreter. Prints the version-pinned packages in the
 # agent's install command, comma-separated.
 _HARNESS_PROBE = """

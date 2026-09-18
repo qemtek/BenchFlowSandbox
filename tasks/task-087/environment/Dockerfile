@@ -5,9 +5,52 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 # ripgrep/grep are the agent's knowledge-base search; no embedding API needed.
+# curl/xz are here only to fetch Node below, and are left in place because
+# BenchFlow's bootstrap probes for them before deciding it has work to do.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ripgrep jq && \
+    apt-get install -y --no-install-recommends \
+      ripgrep jq curl ca-certificates xz-utils && \
     rm -rf /var/lib/apt/lists/*
+
+# The agent's own runtime, baked rather than fetched once per rollout.
+# BenchFlow installs it inside every container: an apt-get for curl and xz, a
+# Node tarball from nodejs.org, then an npm install. Six containers doing that
+# at once exhausted the local resolver on 2026-09-18 — nine install failures in
+# one pass, one task lost outright.
+#
+# Shipping Node here skips the first two outright: BenchFlow guards them on
+# $BF_NODE_DIR/bin/node existing. The npm install still runs, because its guard
+# applies only to unpinned packages and this one is pinned — but every package
+# is in the image's npm cache, so with the settings below it is served from
+# disk in seconds and never reaches the registry. Verified by running
+# BenchFlow's own install command in this image under `--network none`.
+#
+# The versions and paths come from BenchFlow's agent registry at generation
+# time, not from a copy kept here, and `run_experiment.py` refuses a run whose
+# image disagrees with the registry it is about to run under.
+ENV NPM_CONFIG_PREFER_OFFLINE=true \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64|amd64) arch=x64 ;; \
+      aarch64|arm64) arch=arm64 ;; \
+      *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    mkdir -p /opt/benchflow/node; \
+    curl -fsSLo /tmp/node.tar.xz \
+      "https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-${arch}.tar.xz"; \
+    tar -xJf /tmp/node.tar.xz -C /opt/benchflow/node --strip-components=1 --no-same-owner; \
+    rm /tmp/node.tar.xz; \
+    export PATH="/opt/benchflow/node/bin:$PATH"; \
+    /opt/benchflow/node/bin/npm install -g --prefix /opt/benchflow/js-agents @agentclientprotocol/claude-agent-acp@0.73.0; \
+    mkdir -p /opt/benchflow/bin; \
+    printf '%s\n' '#!/bin/sh' \
+      'exec /opt/benchflow/node/bin/node /opt/benchflow/js-agents/bin/claude-agent-acp "$@"' \
+      > /opt/benchflow/bin/claude-agent-acp; \
+    chmod +x /opt/benchflow/bin/claude-agent-acp; \
+    chmod -R a+rX /opt/benchflow
 
 # Only what the vendored banking domain imports — not tau2's agent/LLM stack.
 # Exact versions: an unpinned dependency release would change agent behaviour

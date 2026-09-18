@@ -34,8 +34,13 @@ import os
 import pathlib
 import re
 import shutil
+import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+
+from provenance import harness_runtime  # noqa: E402
+
 TAU2_DATA = REPO / "data" / "banking_knowledge"
 
 # Base image pinned by digest, not tag: `python:3.12-slim` is mutable, so the
@@ -50,9 +55,52 @@ ENV DEBIAN_FRONTEND=noninteractive \\
     PIP_NO_CACHE_DIR=1
 
 # ripgrep/grep are the agent's knowledge-base search; no embedding API needed.
+# curl/xz are here only to fetch Node below, and are left in place because
+# BenchFlow's bootstrap probes for them before deciding it has work to do.
 RUN apt-get update && \\
-    apt-get install -y --no-install-recommends ripgrep jq && \\
+    apt-get install -y --no-install-recommends \\
+      ripgrep jq curl ca-certificates xz-utils && \\
     rm -rf /var/lib/apt/lists/*
+
+# The agent's own runtime, baked rather than fetched once per rollout.
+# BenchFlow installs it inside every container: an apt-get for curl and xz, a
+# Node tarball from nodejs.org, then an npm install. Six containers doing that
+# at once exhausted the local resolver on 2026-09-18 — nine install failures in
+# one pass, one task lost outright.
+#
+# Shipping Node here skips the first two outright: BenchFlow guards them on
+# $BF_NODE_DIR/bin/node existing. The npm install still runs, because its guard
+# applies only to unpinned packages and this one is pinned — but every package
+# is in the image's npm cache, so with the settings below it is served from
+# disk in seconds and never reaches the registry. Verified by running
+# BenchFlow's own install command in this image under `--network none`.
+#
+# The versions and paths come from BenchFlow's agent registry at generation
+# time, not from a copy kept here, and `run_experiment.py` refuses a run whose
+# image disagrees with the registry it is about to run under.
+ENV NPM_CONFIG_PREFER_OFFLINE=true \\
+    NPM_CONFIG_AUDIT=false \\
+    NPM_CONFIG_FUND=false \\
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+RUN set -eu; \\
+    case "$(uname -m)" in \\
+      x86_64|amd64) arch=x64 ;; \\
+      aarch64|arm64) arch=arm64 ;; \\
+      *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;; \\
+    esac; \\
+    mkdir -p __NODE_PREFIX__; \\
+    curl -fsSLo /tmp/node.tar.xz \\
+      "https://nodejs.org/dist/v__NODE_VERSION__/node-v__NODE_VERSION__-linux-${arch}.tar.xz"; \\
+    tar -xJf /tmp/node.tar.xz -C __NODE_PREFIX__ --strip-components=1 --no-same-owner; \\
+    rm /tmp/node.tar.xz; \\
+    export PATH="__NODE_PREFIX__/bin:$PATH"; \\
+    __NODE_PREFIX__/bin/npm install -g --prefix __JS_AGENT_PREFIX__ __AGENT_PACKAGE__; \\
+    mkdir -p __BIN_PREFIX__; \\
+    printf '%s\\n' '#!/bin/sh' \\
+      'exec __NODE_PREFIX__/bin/node __JS_AGENT_PREFIX__/bin/__AGENT_BINARY__ "$@"' \\
+      > __BIN_PREFIX__/__AGENT_BINARY__; \\
+    chmod +x __BIN_PREFIX__/__AGENT_BINARY__; \\
+    chmod -R a+rX /opt/benchflow
 
 # Only what the vendored banking domain imports — not tau2's agent/LLM stack.
 # Exact versions: an unpinned dependency release would change agent behaviour
@@ -706,8 +754,25 @@ def seed_database(task: dict) -> dict:
     return db
 
 
-def generate(task_id: str, out_root: pathlib.Path,
-             brief_text: str, brief_uri: str) -> None:
+def dockerfile(task_pkg: str, runtime: dict) -> str:
+    """The task image, with the agent runtime BenchFlow expects already in it."""
+    text = (DOCKERFILE.replace("__TASK_PKG__", task_pkg)
+                      .replace("__BASE_IMAGE__", BASE_IMAGE))
+    for token, key in (("__NODE_VERSION__", "node_version"),
+                       ("__NODE_PREFIX__", "node_prefix"),
+                       ("__JS_AGENT_PREFIX__", "js_agent_prefix"),
+                       ("__BIN_PREFIX__", "bin_prefix"),
+                       ("__AGENT_PACKAGE__", "agent_package"),
+                       ("__AGENT_BINARY__", "agent_binary")):
+        text = text.replace(token, runtime[key])
+    left = [t for t in ("__NODE_VERSION__", "__AGENT_PACKAGE__") if t in text]
+    if left:
+        raise SystemExit(f"Dockerfile still holds {', '.join(left)}")
+    return text
+
+
+def generate(task_id: str, out_root: pathlib.Path, brief_text: str,
+             brief_uri: str, runtime: dict) -> None:
     task = json.loads((TAU2_DATA / "tasks" / (task_id + ".json")).read_text())
     slug = task_id.replace("_", "-")
     pkg = out_root / slug
@@ -718,8 +783,7 @@ def generate(task_id: str, out_root: pathlib.Path,
 
     (pkg / "task.md").write_text(briefing(task, brief_text, brief_uri))
     (pkg / "environment" / "Dockerfile").write_text(
-        DOCKERFILE.replace("__TASK_PKG__", out_root.name + "/" + slug)
-                  .replace("__BASE_IMAGE__", BASE_IMAGE)
+        dockerfile(out_root.name + "/" + slug, runtime)
     )
 
     (pkg / "verifier" / "gold.json").write_text(
@@ -760,13 +824,19 @@ def main() -> int:
     ap.add_argument("--briefing-version", type=int, default=None,
                     help="prompt registry version to bake in "
                          "(default: the newest registered)")
+    ap.add_argument("--agent", default="claude-agent-acp",
+                    help="whose runtime to bake into the image; must match "
+                         "the agent the run will use")
     args = ap.parse_args()
     brief_text, brief_uri = load_briefing(args.briefing_version)
     print(f"briefing {brief_uri}")
+    runtime = harness_runtime(args.agent)
+    print(f"runtime  node {runtime['node_version']}, "
+          f"{runtime['agent_package']}")
     out_root = REPO / args.out
     out_root.mkdir(parents=True, exist_ok=True)
     for tid in args.task_ids:
-        generate(tid, out_root, brief_text, brief_uri)
+        generate(tid, out_root, brief_text, brief_uri, runtime)
     return 0
 
 

@@ -11,6 +11,10 @@
 jobs/
 mlruns/
 
+# BenchFlow's dataset/agent cache. It clones git repositories into the tree,
+# so an unguarded `git add -A` commits a repository inside this one.
+.cache/
+
 # Scoped rather than a bare *.log: a blanket rule hid nine stray root-level
 # logs from `git status` for a day, so they accumulated unseen.
 jobs/**/*.log

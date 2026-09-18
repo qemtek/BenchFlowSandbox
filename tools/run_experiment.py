@@ -51,6 +51,7 @@ import skill_uptake  # noqa: E402
 from provenance import (  # noqa: E402
     ProvenanceError,
     agent_harness,
+    harness_runtime,
     benchflow_python,
     collect,
 )
@@ -632,6 +633,59 @@ def log_trials(mlflow, jobs_dir: pathlib.Path, tasks_path: pathlib.Path,
     return metrics
 
 
+def baked_runtime(tasks_path: pathlib.Path, selected: list[str],
+                  agent: str) -> dict:
+    """Check the agent runtime in the images against the one BenchFlow expects.
+
+    The task images ship Node and the agent package so no rollout has to fetch
+    them. That only holds while the baked versions are the ones BenchFlow would
+    have installed: after a BenchFlow upgrade the registry pin moves, the image
+    does not, and the run would execute one version while `agent_harness`
+    records another. So compare them and refuse, rather than logging a harness
+    version the container never ran.
+
+    Read-only. Nothing here changes an image; the fix is to regenerate.
+    """
+    expected = harness_runtime(agent)
+    baked = {}
+    for task_dir in (d for d in task_dirs(tasks_path) if d.name in set(selected)):
+        text = (task_dir / "environment" / "Dockerfile").read_text()
+        found = re.search(r"nodejs\.org/dist/v(\S+?)/", text)
+        # The Dockerfile ends the line with `;` and a line continuation, so
+        # match the spec rather than "everything up to whitespace".
+        pkg = re.search(r"npm install -g --prefix \S+ ([^\s;\\]+)", text)
+        baked[task_dir.name] = (found.group(1) if found else "none",
+                                pkg.group(1) if pkg else "none")
+
+    distinct = sorted(set(baked.values()))
+    if len(distinct) > 1:
+        raise SystemExit(
+            "Task images bake different agent runtimes: "
+            + "; ".join(f"node {n}, {p}" for n, p in distinct)
+            + "\nRegenerate the whole set."
+        )
+    node_version, package = distinct[0]
+    if (node_version, package) != (expected["node_version"],
+                                   expected["agent_package"]):
+        raise SystemExit(
+            f"The task images bake node {node_version} and {package}, but "
+            f"BenchFlow {prov_benchflow_version()} installs node "
+            f"{expected['node_version']} and {expected['agent_package']}.\n"
+            "The run would use the image's version and record BenchFlow's. "
+            "Regenerate:\n"
+            "  python tools/make_task.py $(cat tools/eligible_ids.txt) --out "
+            + tasks_path.name
+        )
+    return {"baked_node_version": node_version, "baked_agent_package": package}
+
+
+def prov_benchflow_version() -> str:
+    try:
+        return collect(pathlib.Path("tasks"), "")["toolchain"]["benchflow"]
+    except Exception:
+        return "(version unknown)"
+
+
 def briefing_identity(tasks_path: pathlib.Path, selected: list[str]) -> dict:
     """Read which registered briefing these tasks were built from.
 
@@ -868,11 +922,13 @@ def main() -> int:
     # Before the run starts, so a half-regenerated task set stops the run
     # rather than being discovered after the rollouts are paid for.
     briefing = briefing_identity(tasks_path, selected)
+    runtime = baked_runtime(tasks_path, selected, args.agent)
 
     with mlflow.start_run(run_id=resume_run_id) as run:
         # Params: everything needed to reproduce this run exactly.
         log_params_once(mlflow, run.info.run_id, {
             **briefing,
+            **runtime,
             "git_commit": prov["git"]["commit"],
             "git_branch": prov["git"]["branch"],
             "provenance_version": prov["provenance_version"],

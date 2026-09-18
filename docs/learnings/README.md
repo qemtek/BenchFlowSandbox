@@ -18,6 +18,7 @@ these tell you how to know whether the change did anything.
 | 07 | [Where noise comes from](07-where-noise-comes-from.md) | reaching for more tasks when the run-to-run variation is coming from somewhere else |
 | 08 | [Where bias comes from](08-where-bias-comes-from.md) | answering a bias with more tasks, or reading a narrow interval as a correct result |
 | 09 | [Overfitting to your evaluation set](09-overfitting.md) | quoting a pass rate from the set you tuned against |
+| 10 | [A/B testing and agent evaluation](10-ab-testing.md) | importing experiment advice written for a design you are not running |
 
 `scripts/` holds the simulations behind the figures in pages 02 to 09.
 They are documentation evidence rather than part of the evaluation code, and

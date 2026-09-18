@@ -206,9 +206,17 @@ python tools/run_experiment.py --tasks tasks \
 - **Arms.** No flag exists, so two commits, one run each.
 - **Rebuild.** Required. `vendor/` is copied in at build time, so an edit does
   nothing until the image rebuilds.
-- **Recorded as** `digest_environment`.
+- **Recorded as** `digest_environment`, plus `baked_node_version` and
+  `baked_agent_package` — the agent runtime the image ships.
 - **Gate.** This is where `check_oracles.py` earns its keep: 48 replays through
   the real dispatch path plus a stdio smoke test, no LLM, about two minutes.
+- **Trap.** The image ships Node and the agent package so no rollout fetches
+  them; BenchFlow would otherwise download a Node tarball inside every
+  container, and six of those at once exhausted the local resolver on
+  2026-09-18. The versions come from BenchFlow's registry at generation time,
+  and a run whose images disagree with the registry it is about to run under is
+  refused — otherwise the container runs one harness version while
+  `agent_harness` records another. Regenerate after a BenchFlow upgrade.
 
 ### The skills
 
