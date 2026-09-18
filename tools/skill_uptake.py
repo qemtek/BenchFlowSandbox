@@ -189,6 +189,11 @@ def sampling_settings(job_dir: Path) -> dict:
         out = {
             "provider_model": record.get("provider_model") or "unknown",
             "max_tokens": body.get("max_tokens"),
+            # What `--reasoning-effort` became on the wire. Sonnet 4.6 takes it
+            # as a first-class field and pairs it with adaptive thinking, where
+            # 4.5 took a fixed budget instead; recording the field the provider
+            # saw keeps the two comparable without knowing which is which.
+            "effort_on_wire": (body.get("output_config") or {}).get("effort"),
             "thinking": thinking.get("type") or "absent",
             "thinking_budget_tokens": thinking.get("budget_tokens"),
             "temperature": body.get("temperature"),
